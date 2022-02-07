@@ -7,5 +7,6 @@ adc = MCP3008()
 while True:
 
     value = adc.read( channel = 0 )
-    print("Applied voltage: %.2f" % (value / 1023.0 * 3.3) )
+    # print("Applied voltage: %.2f" % (value / 1023.0 * 3.3) )
+    print("Applied voltage: %f" % value)
     time.sleep(.1)
