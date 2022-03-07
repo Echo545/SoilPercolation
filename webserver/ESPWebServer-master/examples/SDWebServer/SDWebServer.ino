@@ -31,53 +31,19 @@
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
-//#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
 #include <SPI.h>
 #include <SD.h>
 
 #define DBG_OUTPUT_PORT Serial
-#define ANALOG_PIN A0
 
-
-// setup webserver
 const char* ssid = "percolation";
 const char* password = "percolation";
 const char* host = "percolation";
-// ESP8266WebServer server(80);
-AsyncWebServer server(80);
 
-// setup SD card
+ESP8266WebServer server(80);
+
 static bool hasSD = false;
 File uploadFile;
-
-
-/**
- * @brief Reads the pressure sensor data
- *
- * TODO: Process the raw data
- *
- * @return pressure sensor data as a string
- */
-String readPressureSensor() {
-    // Used for averaging data output
-    static int PRINT_INTERVAL = 70;
-
-    unsigned long timepoint_measure = millis();
-    int total = 0;
-    int count = 0;
-    int result;
-
-    while (count < PRINT_INTERVAL) {
-        total += analogRead(ANALOG_PIN);
-        count++;
-    }
-
-    result = total / count;
-    count = 0;
-
-    return String(result);
-}
 
 
 void returnOK() {
@@ -88,24 +54,24 @@ void returnFail(String msg) {
   server.send(500, "text/plain", msg + "\r\n");
 }
 
-bool loadFromSdCard(String path) {
+bool loadFromSdCard(String path){
   String dataType = "text/plain";
-  if (path.endsWith("/")) path += "index.htm";
+  if(path.endsWith("/")) path += "index.htm";
 
-  if (path.endsWith(".src")) path = path.substring(0, path.lastIndexOf("."));
-  else if (path.endsWith(".htm")) dataType = "text/html";
-  else if (path.endsWith(".css")) dataType = "text/css";
-  else if (path.endsWith(".js")) dataType = "application/javascript";
-  else if (path.endsWith(".png")) dataType = "image/png";
-  else if (path.endsWith(".gif")) dataType = "image/gif";
-  else if (path.endsWith(".jpg")) dataType = "image/jpeg";
-  else if (path.endsWith(".ico")) dataType = "image/x-icon";
-  else if (path.endsWith(".xml")) dataType = "text/xml";
-  else if (path.endsWith(".pdf")) dataType = "application/pdf";
-  else if (path.endsWith(".zip")) dataType = "application/zip";
+  if(path.endsWith(".src")) path = path.substring(0, path.lastIndexOf("."));
+  else if(path.endsWith(".htm")) dataType = "text/html";
+  else if(path.endsWith(".css")) dataType = "text/css";
+  else if(path.endsWith(".js")) dataType = "application/javascript";
+  else if(path.endsWith(".png")) dataType = "image/png";
+  else if(path.endsWith(".gif")) dataType = "image/gif";
+  else if(path.endsWith(".jpg")) dataType = "image/jpeg";
+  else if(path.endsWith(".ico")) dataType = "image/x-icon";
+  else if(path.endsWith(".xml")) dataType = "text/xml";
+  else if(path.endsWith(".pdf")) dataType = "application/pdf";
+  else if(path.endsWith(".zip")) dataType = "application/zip";
 
   File dataFile = SD.open(path.c_str());
-  if (dataFile.isDirectory()) {
+  if(dataFile.isDirectory()){
     path += "/index.htm";
     dataType = "text/html";
     dataFile = SD.open(path.c_str());
@@ -124,30 +90,25 @@ bool loadFromSdCard(String path) {
   return true;
 }
 
-
-// Uploads a file to the root of the SD card via POST
-void handleFileUpload() {
-  if (server.uri() != "/edit") return;
-
+void handleFileUpload(){
+  if(server.uri() != "/edit") return;
   HTTPUpload& upload = server.upload();
-
-  if (upload.status == UPLOAD_FILE_START) {
-
-    if (SD.exists((char *)upload.filename.c_str())) SD.remove((char *)upload.filename.c_str());
+  if(upload.status == UPLOAD_FILE_START){
+    if(SD.exists((char *)upload.filename.c_str())) SD.remove((char *)upload.filename.c_str());
     uploadFile = SD.open(upload.filename.c_str(), FILE_WRITE);
     DBG_OUTPUT_PORT.print("Upload: START, filename: "); DBG_OUTPUT_PORT.println(upload.filename);
-  } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
+  } else if(upload.status == UPLOAD_FILE_WRITE){
+    if(uploadFile) uploadFile.write(upload.buf, upload.currentSize);
     DBG_OUTPUT_PORT.print("Upload: WRITE, Bytes: "); DBG_OUTPUT_PORT.println(upload.currentSize);
-  } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadFile) uploadFile.close();
+  } else if(upload.status == UPLOAD_FILE_END){
+    if(uploadFile) uploadFile.close();
     DBG_OUTPUT_PORT.print("Upload: END, Size: "); DBG_OUTPUT_PORT.println(upload.totalSize);
   }
 }
 
-void deleteRecursive(String path) {
+void deleteRecursive(String path){
   File file = SD.open((char *)path.c_str());
-  if (!file.isDirectory()) {
+  if(!file.isDirectory()){
     file.close();
     SD.remove((char *)path.c_str());
     return;
@@ -158,7 +119,7 @@ void deleteRecursive(String path) {
     File entry = file.openNextFile();
     if (!entry) break;
     String entryPath = path + "/" +entry.name();
-    if (entry.isDirectory()) {
+    if(entry.isDirectory()){
       entry.close();
       deleteRecursive(entryPath);
     } else {
@@ -172,10 +133,10 @@ void deleteRecursive(String path) {
   file.close();
 }
 
-void handleDelete() {
-  if (server.args() == 0) return returnFail("BAD ARGS");
+void handleDelete(){
+  if(server.args() == 0) return returnFail("BAD ARGS");
   String path = server.arg(0);
-  if (path == "/" || !SD.exists((char *)path.c_str())) {
+  if(path == "/" || !SD.exists((char *)path.c_str())) {
     returnFail("BAD PATH");
     return;
   }
@@ -183,17 +144,17 @@ void handleDelete() {
   returnOK();
 }
 
-void handleCreate() {
-  if (server.args() == 0) return returnFail("BAD ARGS");
+void handleCreate(){
+  if(server.args() == 0) return returnFail("BAD ARGS");
   String path = server.arg(0);
-  if (path == "/" || SD.exists((char *)path.c_str())) {
+  if(path == "/" || SD.exists((char *)path.c_str())) {
     returnFail("BAD PATH");
     return;
   }
 
-  if (path.indexOf('.') > 0) {
+  if(path.indexOf('.') > 0){
     File file = SD.open((char *)path.c_str(), FILE_WRITE);
-    if (file) {
+    if(file){
       file.write((const char *)0);
       file.close();
     }
@@ -204,12 +165,12 @@ void handleCreate() {
 }
 
 void printDirectory() {
-  if (!server.hasArg("dir")) return returnFail("BAD ARGS");
+  if(!server.hasArg("dir")) return returnFail("BAD ARGS");
   String path = server.arg("dir");
-  if (path != "/" && !SD.exists((char *)path.c_str())) return returnFail("BAD PATH");
+  if(path != "/" && !SD.exists((char *)path.c_str())) return returnFail("BAD PATH");
   File dir = SD.open((char *)path.c_str());
   path = String();
-  if (!dir.isDirectory()) {
+  if(!dir.isDirectory()){
     dir.close();
     return returnFail("NOT DIR");
   }
@@ -241,8 +202,8 @@ void printDirectory() {
  dir.close();
 }
 
-void handleNotFound() {
-  if (hasSD && loadFromSdCard(server.uri())) return;
+void handleNotFound(){
+  if(hasSD && loadFromSdCard(server.uri())) return;
   String message = "SDCARD Not Detected\n\n";
   message += "URI: ";
   message += server.uri();
@@ -251,31 +212,27 @@ void handleNotFound() {
   message += "\nArguments: ";
   message += server.args();
   message += "\n";
-  for (uint8_t i=0; i<server.args(); i++) {
+  for (uint8_t i=0; i<server.args(); i++){
     message += " NAME:"+server.argName(i) + "\n VALUE:" + server.arg(i) + "\n";
   }
   server.send(404, "text/plain", message);
   DBG_OUTPUT_PORT.print(message);
 }
 
-void setup(void) {
+void setup(void){
 
-  delay(1000);
+   delay(1000);
   Serial.begin(115200);
-
-  // Setup input pin for pressure sensor
-  pinMode(ANALOG_PIN, INPUT);
-
   Serial.println();
   Serial.print("Configuring access point...");
   /* You can remove the password parameter if you want the AP to be open. */
-  WiFi.softAP(ssid);
+  WiFi.softAP(ssid, password);
 
   IPAddress myIP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(myIP);
 
-
+  
 
   if (MDNS.begin(host)) {
     MDNS.addService("http", "tcp", 80);
@@ -286,38 +243,23 @@ void setup(void) {
   }
 
 
+  server.on("/list", HTTP_GET, printDirectory);
+  server.on("/edit", HTTP_DELETE, handleDelete);
+  server.on("/edit", HTTP_PUT, handleCreate);
+  server.on("/edit", HTTP_POST, [](){ returnOK(); }, handleFileUpload);
+  server.onNotFound(handleNotFound);
 
-    // setup for graph
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        // Open root dir
-        String FILENAME = "/graph.htm";
-        currentFile = SD.open(FILENAME, FILE_READ);
-
-        request->send_P(200, "text/html", currentFile);
-
-        currentFile.close();
-    });
-    server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send_P(200, "text/plain", readPressureSensor().c_str());
-    });
-
-    // setup for server
-    server.on("/list", HTTP_GET, printDirectory);
-    server.on("/edit", HTTP_DELETE, handleDelete);
-    server.on("/edit", HTTP_PUT, handleCreate);
-    server.on("/edit", HTTP_POST, []() { returnOK(); }, handleFileUpload);
-    server.onNotFound(handleNotFound);
-
+  
 
   server.begin();
   DBG_OUTPUT_PORT.println("HTTP server started");
 
-  if (SD.begin(SS)) {
+  if (SD.begin(SS)){
      DBG_OUTPUT_PORT.println("SD Card initialized.");
      hasSD = true;
   }
 }
 
-void loop(void) {
+void loop(void){
   server.handleClient();
 }
