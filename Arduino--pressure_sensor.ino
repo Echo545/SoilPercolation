@@ -18,6 +18,7 @@
     #define PRINT_INTERVAL 70
 
     int16_t dataVoltage;
+    int16_t rawAO;
     int16_t average = 0;
     int16_t total = 0;
     float dataCurrent, depth; //unit:mA
@@ -50,7 +51,12 @@
         //dataVoltage = analogRead(ANALOG_PIN);
         Serial.print("Raw A0: ");
         Serial.println(dataVoltage);
+        //Used to check if 168 or less
+        rawAO = dataVoltage;
         dataVoltage = dataVoltage / 1024.0 * VREF;
+
+        Serial.print("Data Voltage: ");
+        Serial.println(dataVoltage);
         
         
         //dataCurrent = dataVoltage / 120.0; //Sense Resistor:120ohm
@@ -59,7 +65,8 @@
         //Slope equation for pressure sensor. X10 to convert to millimeters
         depth = (dataVoltage * 1.258 + 161.818)* 10;
 
-        if (depth < 0) 
+        // rawAO of 168 and lower indicates that depth is 0
+        if (depth < 0 || rawAO <= 168) 
         {
           depth = 0.0;
         }
