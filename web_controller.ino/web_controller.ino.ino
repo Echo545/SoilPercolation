@@ -54,9 +54,15 @@ const char index_html[] PROGMEM = R"rawliteral(
   </style>
 </head>
 <body>
-  <h2>PRESSURE SENSOR: <br>
-    %SENSOR_OUTPUT_PLACEHOLDER%
+  <h2> Raw Pressure Sensor Output:
+    <span id="rawpressure">%SENSOR_OUTPUT_PLACEHOLDER%</span>
   </h2>
+  <br>
+  <h2>
+    Processed Pressure Sensor Output: <span id=pressure> </span>
+  </h2>
+  <h3> Updates every 30 ms </h3>
+  <br>
   %BUTTONPLACEHOLDER%
 <script>function toggleCheckbox(element) {
   var xhr = new XMLHttpRequest();
@@ -64,6 +70,29 @@ const char index_html[] PROGMEM = R"rawliteral(
   else { xhr.open("GET", "/update?output="+element.id+"&state=0", true); }
   xhr.send();
 }
+
+setInterval(function ( ) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("rawpressure").innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", "/rawpressure", true);
+  xhttp.send();
+}, 15 ) ;
+
+setInterval(function ( ) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("pressure").innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", "/pressure", true);
+  xhttp.send();
+}, 30 ) ;
+
 </script>
 </body>
 </html>
@@ -77,7 +106,31 @@ void setupSD() {
 
       // Write a new line to visually seperate each new run
       csv_file.print("\n");
+
+      csv_file.close();
   }
+}
+
+void writeSD() {
+    if (hasSD) {
+
+      csv_file = SD.open(OUTPUT_FILE, FILE_WRITE);
+
+      // Write to SD card
+      csv_file.print(String(millis()));
+      csv_file.print(",");
+      csv_file.print(readPressureSensor_RAW());
+      csv_file.print(",");
+      csv_file.print(digitalRead(VALVE_OPEN));
+      csv_file.print("\n");
+      Serial.println("Wrote to SD card");
+
+      csv_file.close();
+    }
+    else {
+      Serial.println("SD card not found... attempting setup");
+      setupSD();
+    }
 }
 
 void openValve() {
@@ -90,31 +143,36 @@ void closeValve() {
   digitalWrite(VALVE_CLOSE, HIGH);
 }
 
+String readPressureSensor_RAW() {
+    int result = analogRead(SENSOR_PIN);
+    Serial.printf("Raw read: %d\n", result);
+
+    return String(result);
+}
+
 String readPressureSensor() {
     // Used for averaging data output
-    // static int PRINT_INTERVAL = 70;
+    static int PRINT_INTERVAL = 70;
 
-    // unsigned long timepoint_measure = millis();
-    // int total = 0;
-    // int count = 0;
-    // int raw_read;
-    // int result;
+    unsigned long timepoint_measure = millis();
+    int total = 0;
+    int count = 0;
+    int raw_read;
+    int result;
 
-    // while (count < PRINT_INTERVAL) {
-    //     raw_read = analogRead(SENSOR_PIN);
-    //     Serial.printf("Raw read: %d\n", raw_read);
-    //     total += raw_read;
-    //     count++;
-    // }
+    while (count < PRINT_INTERVAL) {
+        raw_read = analogRead(SENSOR_PIN);
+        total += raw_read;
+        count++;
+    }
 
-    // result = total / count;
-    // count = 0;
+    result = total / count;
+    count = 0;
 
-    // return String(result);
-
-    // temp solution:
-    return String(analogRead(SENSOR_PIN));
+    Serial.printf("Processed read: %d\n", result);
+    return String(result);
 }
+
 
 // Replaces placeholder with button section in your web page
 String processor(const String& var) {
@@ -124,7 +182,7 @@ String processor(const String& var) {
     output += "<h4>Output - GPIO " + String(VALVE_OPEN) +"</h4><label class=\"switch\"><input type=\"checkbox\" onchange=\"toggleCheckbox(this)\" id=\"" + String(VALVE_OPEN) + "\" " + outputState(VALVE_OPEN) + "><span class=\"slider\"></span></label>";
   }
   else if (var == "SENSOR_OUTPUT_PLACEHOLDER") {
-    output += readPressureSensor();
+    output += readPressureSensor_RAW();
   }
   return output;
 }
@@ -174,28 +232,81 @@ void setup(){
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", index_html, processor);
 
-    if (hasSD) {
-      // Write to SD card
-      csv_file.print(String(millis()));
-      csv_file.print(",");
-      csv_file.print(readPressureSensor());
-      csv_file.print(",");
-      csv_file.print(digitalRead(VALVE_OPEN));
-      csv_file.print("\n");
-      Serial.println("Wrote to SD card");
-    }
-    else {
-      Serial.println("SD card not found... attempting setup");
-      setupSD();
-    }
+    writeSD();
   });
 
   server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
 
+    if (!hasSD) {
+      setupSD();
+    }
+
     String output_contents = csv_file.readString();
+    Serial.println(csv_file.readString());
     Serial.println(csv_file.read());
     request->send(200, "text/html", output_contents);
   });
+
+  server.on("/rawpressure", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/html", readPressureSensor_RAW());
+  });
+
+  server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/html", readPressureSensor());
+  });
+
+  server.on("/graph", HTTP_GET, [](AsyncWebServerRequest *request){
+    File indexFile;
+    String result = "Pending SD Card...";
+
+    if (hasSD) {
+      indexFile = SD.open("/graph.htm");
+      result = indexFile.readString();
+      indexFile.close();
+    }
+    else {
+      setupSD();
+    }
+
+    request->send(200, "text/html", result);
+  });
+
+
+  // server.on("/highcharts.js", HTTP_GET, [](AsyncWebServerRequest *request){
+  //   request->send(SD, "/highcharts.js", "text/html");
+  // });
+
+  // server.serveStatic("/", SD, "/");
+
+
+  server.on("/highcharts.js", HTTP_GET, [](AsyncWebServerRequest *request){
+    File indexFile;
+    String result = "";
+
+    if (hasSD) {
+      indexFile = SD.open("/highcharts.js");
+
+      // while (indexFile.available()) {
+      //   // result += indexFile.read();
+      //   Serial.write(indexFile.read());
+      // }
+
+      if (!indexFile.available()) {
+        indexFile = SD.open("/highcharts.js");
+      }
+
+      String strResult = indexFile.readString();
+      Serial.println(strResult);
+
+      request->send(200, "text/html", strResult);
+      indexFile.close();
+    }
+    else {
+      setupSD();
+      request->send(500, "text/html", "SD CARD NOT AVAILABLE: TRY AGAIN");
+    }
+  });
+
 
   // Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
   server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
@@ -226,6 +337,7 @@ void setup(){
     Serial.print(inputMessage1);
     Serial.print(" - Set to: ");
     Serial.println(inputMessage2);
+    writeSD();
     request->send(200, "text/plain", "OK");
   });
 
@@ -239,7 +351,7 @@ void loop() {
   //   // Write to SD card
   //   csv_file.print(String(millis()));
   //   csv_file.print(",");
-  //   csv_file.print(readPressureSensor());
+  //   csv_file.print(readPressureSensor_RAW());
   //   csv_file.print(",");
   //   csv_file.print(digitalRead(VALVE_OPEN));
   //   csv_file.print("\n");
