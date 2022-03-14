@@ -4,6 +4,7 @@
 #include <ESP8266mDNS.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include "FS.h"
 #include <SPI.h>
 #include <SD.h>
 
@@ -286,14 +287,13 @@ void setup(){
     if (hasSD) {
       indexFile = SD.open("/highcharts.js");
 
-      // while (indexFile.available()) {
-      //   // result += indexFile.read();
-      //   Serial.write(indexFile.read());
-      // }
-
-      if (!indexFile.available()) {
-        indexFile = SD.open("/highcharts.js");
+      while (indexFile.available()) {
+        // result += indexFile.read();
+        Serial.write(indexFile.read());
       }
+      indexFile.close();
+
+      indexFile = SD.open("/highcharts.js");
 
       String strResult = indexFile.readString();
       Serial.println(strResult);
