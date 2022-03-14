@@ -1,8 +1,7 @@
 // Importing necessary libraries
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <WiFiClient.h>
-#include <ESP8266mDNS.h>
-#include <ESPAsyncTCP.h>
+#include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "FS.h"
 #include <SPI.h>
@@ -10,31 +9,27 @@
 
 // Setup motor controller
 const uint8_t VALVE_ENABLE = 0;
-const uint8_t SENSOR_PIN = 0;
+const uint8_t SENSOR_PIN = 34;
 
 const int VALVE_OPEN = 4;
 const int VALVE_CLOSE = 13;
 
 
 // SD Card setup
-const char* OUTPUT_FILE = "output.csv";
+const char* OUTPUT_FILE = "/output.csv";
 static bool hasSD = false;
 String csv_data = "";
 File csv_file;
 
 // Setting network credentials
 const char* ssid = "percolation";
-const char* password = "percolation";
 const char* host = "percolation";
 
 const char* input_parameter1 = "output";
 const char* input_parameter2 = "state";
 
-
 // Creating a AsyncWebServer object
 AsyncWebServer server(80);
-
-
 
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html>
@@ -117,22 +112,29 @@ void writeSD() {
 
       csv_file = SD.open(OUTPUT_FILE, FILE_WRITE);
 
-      // Write to SD card
-      csv_file.print(String(millis()));
-      csv_file.print(",");
-      csv_file.print(readPressureSensor_RAW());
-      csv_file.print(",");
-      csv_file.print(digitalRead(VALVE_OPEN));
-      csv_file.print("\n");
-      Serial.println("Wrote to SD card");
+      if (csv_file) {
+        // Write to SD card in format: (time, pressure, valve status)
+        csv_file.print(String(millis()));
+        csv_file.print(",");
+        csv_file.print(readPressureSensor_RAW());
+        csv_file.print(",");
+        csv_file.print(digitalRead(VALVE_OPEN));
+        csv_file.print("\n");
+        Serial.println("Wrote to SD card");
 
-      csv_file.close();
+        csv_file.close();
+      }
+      else
+      {
+        Serial.println("Failed to open CSV File");
+      }
     }
     else {
       Serial.println("SD card not found... attempting setup");
       setupSD();
     }
 }
+
 
 void openValve() {
   digitalWrite(VALVE_OPEN, HIGH);
@@ -232,8 +234,6 @@ void setup(){
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", index_html, processor);
-
-    writeSD();
   });
 
   server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -242,13 +242,17 @@ void setup(){
       setupSD();
     }
 
+    csv_file = SD.open(OUTPUT_FILE);
+
     String output_contents = csv_file.readString();
     Serial.println(csv_file.readString());
-    Serial.println(csv_file.read());
     request->send(200, "text/html", output_contents);
+    csv_file.close();
   });
 
   server.on("/rawpressure", HTTP_GET, [](AsyncWebServerRequest *request){
+    writeSD();
+
     request->send(200, "text/html", readPressureSensor_RAW());
   });
 
@@ -273,40 +277,11 @@ void setup(){
   });
 
 
-  // server.on("/highcharts.js", HTTP_GET, [](AsyncWebServerRequest *request){
-  //   request->send(SD, "/highcharts.js", "text/html");
-  // });
-
-  // server.serveStatic("/", SD, "/");
-
-
   server.on("/highcharts.js", HTTP_GET, [](AsyncWebServerRequest *request){
-    File indexFile;
-    String result = "";
-
-    if (hasSD) {
-      indexFile = SD.open("/highcharts.js");
-
-      while (indexFile.available()) {
-        // result += indexFile.read();
-        Serial.write(indexFile.read());
-      }
-      indexFile.close();
-
-      indexFile = SD.open("/highcharts.js");
-
-      String strResult = indexFile.readString();
-      Serial.println(strResult);
-
-      request->send(200, "text/html", strResult);
-      indexFile.close();
-    }
-    else {
-      setupSD();
-      request->send(500, "text/html", "SD CARD NOT AVAILABLE: TRY AGAIN");
-    }
+    request->send(SD, "/highcharts.js", "text/html");
   });
 
+  // server.serveStatic("/", SD, "/");
 
   // Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
   server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
@@ -337,7 +312,6 @@ void setup(){
     Serial.print(inputMessage1);
     Serial.print(" - Set to: ");
     Serial.println(inputMessage2);
-    writeSD();
     request->send(200, "text/plain", "OK");
   });
 
@@ -347,17 +321,4 @@ void setup(){
 
 void loop() {
 
-  // if (hasSD) {
-  //   // Write to SD card
-  //   csv_file.print(String(millis()));
-  //   csv_file.print(",");
-  //   csv_file.print(readPressureSensor_RAW());
-  //   csv_file.print(",");
-  //   csv_file.print(digitalRead(VALVE_OPEN));
-  //   csv_file.print("\n");
-  //   Serial.println("Wrote to SD card");
-  // }
-  // else {
-  //   Serial.println("SD card not found");
-  // }
 }
