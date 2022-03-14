@@ -18,7 +18,7 @@ To compile this code you will need to include the following libraries in your Ar
 * Update the function `readPressureSensor()` with the most recent depth calculation. **NOTE: some of the threshold values will have to change because the way the ESP32 reads analog data is slightly different**
 * Get `writeSD()` working properly so that it appends to the file instead of overwriting it
 * Automatically toggle the valve when the depth reaches a certain threshold
-* Update JS for the graph located on the SD card in `/graph.htm` to diskplay a more readable output
+* Update JS for the graph located on the SD card in `/graph.htm` to display a more readable output
 * Create a captive portal to automatically redirect anyone who connects to the network to the dashboard at `www.192.168.4.1`
 * Once functional, refactor the web controller to use `.html` files entirely stored on the SD card to decrease build time.
   * Then we can build a more intuitive user interface that looks pretty and scales for mobile devices
