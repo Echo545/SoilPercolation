@@ -7,13 +7,13 @@
 #include <SPI.h>
 #include <SD.h>
 
+
 // Setup motor controller
 const uint8_t VALVE_ENABLE = 0;
-const uint8_t SENSOR_PIN = 34;
-
 const int VALVE_OPEN = 4;
-const int VALVE_CLOSE = 13;
+const int VALVE_CLOSE = 16;
 
+const uint8_t SENSOR_PIN = 34;
 
 // SD Card setup
 const char* OUTPUT_FILE = "/output.csv";
@@ -76,7 +76,7 @@ setInterval(function ( ) {
   };
   xhttp.open("GET", "/rawpressure", true);
   xhttp.send();
-}, 15 ) ;
+}, 20 ) ;
 
 setInterval(function ( ) {
   var xhttp = new XMLHttpRequest();
@@ -87,7 +87,7 @@ setInterval(function ( ) {
   };
   xhttp.open("GET", "/pressure", true);
   xhttp.send();
-}, 30 ) ;
+}, 20 ) ;
 
 </script>
 </body>
@@ -120,7 +120,7 @@ void writeSD() {
         csv_file.print(",");
         csv_file.print(digitalRead(VALVE_OPEN));
         csv_file.print("\n");
-        Serial.println("Wrote to SD card");
+        // Serial.println("Wrote to SD card");
 
         csv_file.close();
       }
@@ -148,14 +148,14 @@ void closeValve() {
 
 String readPressureSensor_RAW() {
     int result = analogRead(SENSOR_PIN);
-    Serial.printf("Raw read: %d\n", result);
+    // Serial.printf("Raw read: %d\n", result);
 
     return String(result);
 }
 
 String readPressureSensor() {
     // Used for averaging data output
-    static int PRINT_INTERVAL = 70;
+    static int PRINT_INTERVAL = 250;
 
     unsigned long timepoint_measure = millis();
     int total = 0;
