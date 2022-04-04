@@ -1,32 +1,32 @@
 // Importing necessary libraries
-#include <WiFi.h>
-#include <WiFiClient.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include "FS.h"
-#include <SPI.h>
 #include <SD.h>
+#include <SPI.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
 
+#include "FS.h"
 
 // Setup motor controller
-const uint8_t VALVE_ENABLE = 0;
-const int VALVE_OPEN = 4;
-const int VALVE_CLOSE = 16;
+const uint8_t VALVE_ENABLE = 23;
+const int VALVE_OPEN = 22;
+const int VALVE_CLOSE = 21;
 
 const uint8_t SENSOR_PIN = 34;
 
 // SD Card setup
-const char* OUTPUT_FILE = "/output.csv";
+const char *OUTPUT_FILE = "/output.csv";
 static bool hasSD = false;
 String csv_data = "";
 File csv_file;
 
 // Setting network credentials
-const char* ssid = "percolation";
-const char* host = "percolation";
+const char *ssid = "percolation";
+const char *host = "percolation";
 
-const char* input_parameter1 = "output";
-const char* input_parameter2 = "state";
+const char *input_parameter1 = "output";
+const char *input_parameter2 = "state";
 
 // Creating a AsyncWebServer object
 AsyncWebServer server(80);
@@ -96,54 +96,59 @@ setInterval(function ( ) {
 
 void setupSD() {
     if (SD.begin(SS)) {
-     Serial.println("SD Card initialized.");
-      hasSD = true;
-      csv_file = SD.open(OUTPUT_FILE, FILE_WRITE);
+        Serial.println("SD Card initialized.");
+        hasSD = true;
+        csv_file = SD.open(OUTPUT_FILE, FILE_WRITE);
 
-      // Write a new line to visually seperate each new run
-      csv_file.print("\n");
+        // Write a new line to visually seperate each new run
+        csv_file.print("\n");
 
-      csv_file.close();
-  }
+        csv_file.close();
+    }
 }
 
 void writeSD() {
+    // String printBuffer = "";
+
     if (hasSD) {
+        csv_file = SD.open(OUTPUT_FILE, FILE_WRITE);
 
-      csv_file = SD.open(OUTPUT_FILE, FILE_WRITE);
+        if (csv_file) {
+            // Write to SD card in format: (time, pressure, valve status)
+            csv_file.print(String(millis()));
+            csv_file.print(",");
+            csv_file.print(readPressureSensor_RAW());
+            csv_file.print(",");
+            csv_file.print(digitalRead(VALVE_OPEN));
+            csv_file.print("\n");
+            Serial.println("Wrote to SD card at position " + String(csv_file.position()));
+            Serial.println("New file size: " + String(csv_file.size()));
 
-      if (csv_file) {
-        // Write to SD card in format: (time, pressure, valve status)
-        csv_file.print(String(millis()));
-        csv_file.print(",");
-        csv_file.print(readPressureSensor_RAW());
-        csv_file.print(",");
-        csv_file.print(digitalRead(VALVE_OPEN));
-        csv_file.print("\n");
-        // Serial.println("Wrote to SD card");
+            // printBuffer = String(millis()) + "," + String(readPressureSensor_RAW()) + "," + String(digitalRead(VALVE_OPEN)) + "\n";
 
-        csv_file.close();
-      }
-      else
-      {
-        Serial.println("Failed to open CSV File");
-      }
-    }
-    else {
-      Serial.println("SD card not found... attempting setup");
-      setupSD();
+            // char* buffer = new char[printBuffer.length() + 1];
+            // strcpy(buffer, printBuffer.c_str());
+
+            // csv_file.write(buffer, printBuffer.length());
+
+            csv_file.close();
+        } else {
+            Serial.println("Failed to open CSV File");
+        }
+    } else {
+        Serial.println("SD card not found... attempting setup");
+        setupSD();
     }
 }
 
-
 void openValve() {
-  digitalWrite(VALVE_OPEN, HIGH);
-  digitalWrite(VALVE_CLOSE, LOW);
+    digitalWrite(VALVE_OPEN, HIGH);
+    digitalWrite(VALVE_CLOSE, LOW);
 }
 
 void closeValve() {
-  digitalWrite(VALVE_OPEN, LOW);
-  digitalWrite(VALVE_CLOSE, HIGH);
+    digitalWrite(VALVE_OPEN, LOW);
+    digitalWrite(VALVE_CLOSE, HIGH);
 }
 
 String readPressureSensor_RAW() {
@@ -176,149 +181,140 @@ String readPressureSensor() {
     return String(result);
 }
 
-
 // Replaces placeholder with button section in your web page
-String processor(const String& var) {
-  String output = "";
+String processor(const String &var) {
+    String output = "";
 
-  if(var == "BUTTONPLACEHOLDER") {
-    output += "<h4>Output - GPIO " + String(VALVE_OPEN) +"</h4><label class=\"switch\"><input type=\"checkbox\" onchange=\"toggleCheckbox(this)\" id=\"" + String(VALVE_OPEN) + "\" " + outputState(VALVE_OPEN) + "><span class=\"slider\"></span></label>";
-  }
-  else if (var == "SENSOR_OUTPUT_PLACEHOLDER") {
-    output += readPressureSensor_RAW();
-  }
-  return output;
+    if (var == "BUTTONPLACEHOLDER") {
+        output += "<h4>Output - GPIO " + String(VALVE_OPEN) +
+                  "</h4><label class=\"switch\"><input type=\"checkbox\" "
+                  "onchange=\"toggleCheckbox(this)\" id=\"" +
+                  String(VALVE_OPEN) + "\" " + outputState(VALVE_OPEN) +
+                  "><span class=\"slider\"></span></label>";
+    } else if (var == "SENSOR_OUTPUT_PLACEHOLDER") {
+        output += readPressureSensor_RAW();
+    }
+    return output;
 }
 
-String outputState(int output){
-  if(digitalRead(output)){
-    return "checked";
-  }
-  else {
-    return "";
-  }
+String outputState(int output) {
+    if (digitalRead(output)) {
+        return "checked";
+    } else {
+        return "";
+    }
 }
 
-void setup(){
-  // Serial port for debugging purposes
-  Serial.begin(9600);
+void setup() {
+    // Serial port for debugging purposes
+    Serial.begin(9600);
 
-  Serial.println("STARTING UP (wait 7 seconds)...");
+    Serial.println("STARTING UP (wait 7 seconds)...");
 
-  // Sleep 7 seconds
-  delay(7000);
+    // Sleep 7 seconds
+    delay(7000);
 
-  Serial.println("STARTING UP");
+    Serial.println("STARTING UP");
 
-  // Setup IO pins
-  pinMode(VALVE_ENABLE, OUTPUT);
-  pinMode(VALVE_OPEN, OUTPUT);
-  pinMode(VALVE_CLOSE, OUTPUT);
-  pinMode(SENSOR_PIN, INPUT);
+    // Setup IO pins
+    pinMode(VALVE_ENABLE, OUTPUT);
+    pinMode(VALVE_OPEN, OUTPUT);
+    pinMode(VALVE_CLOSE, OUTPUT);
+    pinMode(SENSOR_PIN, INPUT);
 
+    // Setup SD Output
+    setupSD();
 
-  // Setup SD Output
-  setupSD();
+    // Host AP
+    Serial.println();
+    Serial.println("Configuring access point...");
+    /* You can remove the password parameter if you want the AP to be open. */
+    WiFi.softAP(ssid);
 
+    IPAddress myIP = WiFi.softAPIP();
+    Serial.print("AP IP address: ");
+    Serial.println(myIP);
 
-  //Host AP
-  Serial.println();
-  Serial.println("Configuring access point...");
-  /* You can remove the password parameter if you want the AP to be open. */
-  WiFi.softAP(ssid);
+    // Route for root / web page
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", index_html, processor);
+    });
 
-  IPAddress myIP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(myIP);
-
-  // Route for root / web page
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", index_html, processor);
-  });
-
-  server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
-
-    if (!hasSD) {
-      setupSD();
-    }
-
-    csv_file = SD.open(OUTPUT_FILE);
-
-    String output_contents = csv_file.readString();
-    Serial.println(csv_file.readString());
-    request->send(200, "text/html", output_contents);
-    csv_file.close();
-  });
-
-  server.on("/rawpressure", HTTP_GET, [](AsyncWebServerRequest *request){
-    writeSD();
-
-    request->send(200, "text/html", readPressureSensor_RAW());
-  });
-
-  server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/html", readPressureSensor());
-  });
-
-  server.on("/graph", HTTP_GET, [](AsyncWebServerRequest *request){
-    File indexFile;
-    String result = "Pending SD Card...";
-
-    if (hasSD) {
-      indexFile = SD.open("/graph.htm");
-      result = indexFile.readString();
-      indexFile.close();
-    }
-    else {
-      setupSD();
-    }
-
-    request->send(200, "text/html", result);
-  });
-
-
-  server.on("/highcharts.js", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SD, "/highcharts.js", "text/html");
-  });
-
-  // server.serveStatic("/", SD, "/");
-
-  // Send a GET request to <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
-  server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    String inputMessage1;
-    String inputMessage2;
-    // GET input1 value on <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
-    if (request->hasParam(input_parameter1) && request->hasParam(input_parameter2)) {
-      inputMessage1 = request->getParam(input_parameter1)->value();
-      inputMessage2 = request->getParam(input_parameter2)->value();
-      // digitalWrite(inputMessage1.toInt(), inputMessage2.toInt());
-
-      // Control valve
-      if (inputMessage1.equals(String(VALVE_OPEN))) {
-        if (inputMessage2.equals("1")) {
-          openValve();
+    server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!hasSD) {
+            setupSD();
         }
-        else if (inputMessage2.equals("0")) {
-          closeValve();
+
+        csv_file = SD.open(OUTPUT_FILE);
+
+        String output_contents = csv_file.readString();
+        Serial.println(csv_file.readString());
+        request->send(200, "text/html", output_contents);
+        csv_file.close();
+    });
+
+    server.on("/rawpressure", HTTP_GET, [](AsyncWebServerRequest *request) {
+        writeSD();
+
+        request->send(200, "text/html", readPressureSensor_RAW());
+    });
+
+    server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", readPressureSensor());
+    });
+
+    server.on("/graph", HTTP_GET, [](AsyncWebServerRequest *request) {
+        File indexFile;
+        String result = "Pending SD Card...";
+
+        if (hasSD) {
+            indexFile = SD.open("/graph.htm");
+            result = indexFile.readString();
+            indexFile.close();
+        } else {
+            setupSD();
         }
-      }
 
-    }
-    else {
-      inputMessage1 = "No message sent";
-      inputMessage2 = "No message sent";
-    }
-    Serial.print("GPIO: ");
-    Serial.print(inputMessage1);
-    Serial.print(" - Set to: ");
-    Serial.println(inputMessage2);
-    request->send(200, "text/plain", "OK");
-  });
+        request->send(200, "text/html", result);
+    });
 
-  // Start server
-  server.begin();
+    server.serveStatic("/", SD, "/");
+
+    // Send a GET request to
+    // <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
+    server.on("/update", HTTP_GET, [](AsyncWebServerRequest *request) {
+        String inputMessage1;
+        String inputMessage2;
+        // GET input1 value on
+        // <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
+        if (request->hasParam(input_parameter1) &&
+            request->hasParam(input_parameter2)) {
+            inputMessage1 = request->getParam(input_parameter1)->value();
+            inputMessage2 = request->getParam(input_parameter2)->value();
+            // digitalWrite(inputMessage1.toInt(), inputMessage2.toInt());
+
+            // Control valve
+            if (inputMessage1.equals(String(VALVE_OPEN))) {
+                if (inputMessage2.equals("1")) {
+                    openValve();
+                } else if (inputMessage2.equals("0")) {
+                    closeValve();
+                }
+            }
+
+        } else {
+            inputMessage1 = "No message sent";
+            inputMessage2 = "No message sent";
+        }
+        Serial.print("GPIO: ");
+        Serial.print(inputMessage1);
+        Serial.print(" - Set to: ");
+        Serial.println(inputMessage2);
+        request->send(200, "text/plain", "OK");
+    });
+
+    // Start server
+    server.begin();
 }
 
-void loop() {
-
-}
+void loop() {}

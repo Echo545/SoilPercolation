@@ -8,6 +8,10 @@ copies or substantial portions of the Software. -->
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script type="text/javascript" src="highcharts.js"></script>
+  <script type="text/javascript" src="exporting.js"></script>
+  <script type="text/javascript" src="boost.js"></script>
+  <script type="text/javascript" src="export-data.js"></script>
+
   <style>
     body {
       min-width: 310px;
@@ -20,20 +24,43 @@ copies or substantial portions of the Software. -->
       font-size: 2.5rem;
       text-align: center;
     }
+    pre {
+      border: 1px solid silver;
+      border-radius: 0.5em;
+      padding: 1em;
+      color: green;
+    }
   </style>
 </head>
 <body>
   <h2>ESP Pressure</h2>
+
+  <hr>
+
+  <h4>Raw Pressure:</h4>
+
   <div id="chart-pressure-raw" class="container"></div>
+
+  <h4>Processed Pressure:</h4>
+
   <div id="chart-pressure" class="container"></div>
+
+  <br>
+
+  <hr>
+
+  <h3>Exported CSV:</h3>
+  <pre id="preview"></pre>
+
 </body>
 <script>
 
-var chartH = new Highcharts.Chart({
+var chartRawPressure = new Highcharts.Chart({
   chart:{ renderTo:'chart-pressure-raw' },
   title: { text: 'Raw Pressure' },
   series: [{
     showInLegend: false,
+    name: 'Raw Pressure',
     data: []
   }],
   plotOptions: {
@@ -48,7 +75,7 @@ var chartH = new Highcharts.Chart({
   yAxis: {
     min: 421,
     max: 490,
-    title: { text: 'Raw Pressure (%)' }
+    title: { text: 'Raw Pressure' }
   },
   credits: { enabled: false }
 });
@@ -59,10 +86,10 @@ setInterval(function ( ) {
       var x = (new Date()).getTime(),
           y = parseFloat(this.responseText);
       //console.log(this.responseText);
-      if(chartH.series[0].data.length > 40) {
-        chartH.series[0].addPoint([x, y], true, true, true);
+      if(chartRawPressure.series[0].data.length > 40) {
+        chartRawPressure.series[0].addPoint([x, y], true, true, true);
       } else {
-        chartH.series[0].addPoint([x, y], true, false, true);
+        chartRawPressure.series[0].addPoint([x, y], true, false, true);
       }
     }
   };
@@ -70,11 +97,12 @@ setInterval(function ( ) {
   xhttp.send();
 }, 100 ) ;
 
-var chartP = new Highcharts.Chart({
+var chartPressure = new Highcharts.Chart({
   chart:{ renderTo:'chart-pressure' },
   title: { text: 'Pressure' },
   series: [{
     showInLegend: false,
+    name: 'Pressure',
     data: []
   }],
   plotOptions: {
@@ -90,7 +118,7 @@ var chartP = new Highcharts.Chart({
   yAxis: {
     min: 421,
     max: 490,
-    title: { text: 'Pressure (hPa)' }
+    title: { text: 'Pressure' }
   },
   credits: { enabled: false }
 });
@@ -101,10 +129,10 @@ setInterval(function ( ) {
       var x = (new Date()).getTime(),
           y = parseFloat(this.responseText);
       //console.log(this.responseText);
-      if(chartP.series[0].data.length > 40) {
-        chartP.series[0].addPoint([x, y], true, true, true);
+      if(chartPressure.series[0].data.length > 40) {
+        chartPressure.series[0].addPoint([x, y], true, true, true);
       } else {
-        chartP.series[0].addPoint([x, y], true, false, true);
+        chartPressure.series[0].addPoint([x, y], true, false, true);
       }
     }
   };
