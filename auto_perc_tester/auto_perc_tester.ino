@@ -251,6 +251,10 @@ void loop() {
 
     // TODO: blink status LED while test is ready to start
 
+    // TODO: set the date/time on the RTC module ONCE, then retrieve it
+
+    // TODO: create a new csv file with the date/time for each test
+
 
     // TODO: write to log every 1 second
     if (millis() - log_timer > LOG_WRITE_INTERVAL) {
