@@ -1,3 +1,12 @@
+void setup() {
+  // put your setup code here, to run once:
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+
+}
 // Importing necessary libraries
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -47,69 +56,6 @@ const int LOG_WRITE_INTERVAL = 1000;    // 1 second
 time_t log_timer = 0;
 
 String error_message = "";
-
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <title>ESP8266 WEB SERVER</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:,">
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    p {font-size: 3.0rem;}
-    body {max-width: 600px; margin:0px auto; padding-bottom: 25px;}
-    .switch {position: relative; display: inline-block; width: 120px; height: 68px}
-    .switch input {display: none}
-    .slider {position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 6px}
-    .slider:before {position: absolute; content: ""; height: 52px; width: 52px; left: 8px; bottom: 8px; background-color: #fff; -webkit-transition: .4s; transition: .4s; border-radius: 3px}
-    input:checked+.slider {background-color: #b30000}
-    input:checked+.slider:before {-webkit-transform: translateX(52px); -ms-transform: translateX(52px); transform: translateX(52px)}
-  </style>
-</head>
-<body>
-  <h2> Raw Pressure Sensor Output:
-    <span id="rawpressure">%SENSOR_OUTPUT_PLACEHOLDER%</span>
-  </h2>
-  <br>
-  <h2>
-    Processed Pressure Sensor Output: <span id=pressure> </span>
-  </h2>
-  <h3> Updates every 30 ms </h3>
-  <br>
-  %BUTTONPLACEHOLDER%
-<script>function toggleCheckbox(element) {
-  var xhr = new XMLHttpRequest();
-  if(element.checked){ xhr.open("GET", "/update?output="+element.id+"&state=1", true); }
-  else { xhr.open("GET", "/update?output="+element.id+"&state=0", true); }
-  xhr.send();
-}
-
-setInterval(function ( ) {
-  var xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4 && this.status == 200) {
-      document.getElementById("rawpressure").innerHTML = this.responseText;
-    }
-  };
-  xhttp.open("GET", "/rawpressure", true);
-  xhttp.send();
-}, 20 ) ;
-
-setInterval(function ( ) {
-  var xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4 && this.status == 200) {
-      document.getElementById("pressure").innerHTML = this.responseText;
-    }
-  };
-  xhttp.open("GET", "/pressure", true);
-  xhttp.send();
-}, 20 ) ;
-
-</script>
-</body>
-</html>
-)rawliteral";
 
 void setupSD() {
     if (SD.begin(SS)) {
@@ -195,35 +141,11 @@ String readPressureSensor() {
     return String(result);
 }
 
-// Replaces placeholder with button section in your web page
-String processor(const String &var) {
-    String output = "";
-
-    if (var == "BUTTONPLACEHOLDER") {
-        output += "<h4>Output - GPIO " + String(VALVE_OPEN) +
-                  "</h4><label class=\"switch\"><input type=\"checkbox\" "
-                  "onchange=\"toggleCheckbox(this)\" id=\"" +
-                  String(VALVE_OPEN) + "\" " + outputState(VALVE_OPEN) +
-                  "><span class=\"slider\"></span></label>";
-    } else if (var == "SENSOR_OUTPUT_PLACEHOLDER") {
-        output += readPressureSensor_RAW();
-    }
-    return output;
-}
-
-String outputState(int output) {
-    if (digitalRead(output)) {
-        return "checked";
-    } else {
-        return "";
-    }
-}
-
 void setup() {
     // Serial port for debugging purposes
     Serial.begin(9600);
 
-    // Sleep 1 second1
+    // Sleep 1 seconds
     delay(1000);
 
     Serial.println("STARTING UP");
@@ -255,7 +177,6 @@ void setup() {
     IPAddress myIP = WiFi.softAPIP();
     Serial.print("AP IP address: ");
     Serial.println(myIP);
-
 
     // Route for root / web page
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -299,38 +220,6 @@ void setup() {
     });
 
     server.serveStatic("/", SD, "/");
-
-    // Send a GET request to
-    // <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
-    server.on("/update", HTTP_GET, [](AsyncWebServerRequest *request) {
-        String inputMessage1;
-        String inputMessage2;
-        // GET input1 value on
-        // <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
-        if (request->hasParam(input_parameter1) &&
-            request->hasParam(input_parameter2)) {
-            inputMessage1 = request->getParam(input_parameter1)->value();
-            inputMessage2 = request->getParam(input_parameter2)->value();
-
-            // Control valve
-            if (inputMessage1.equals(String(VALVE_OPEN))) {
-                if (inputMessage2.equals("1")) {
-                    openValve();
-                } else if (inputMessage2.equals("0")) {
-                    closeValve();
-                }
-            }
-
-        } else {
-            inputMessage1 = "No message sent";
-            inputMessage2 = "No message sent";
-        }
-        Serial.print("GPIO: ");
-        Serial.print(inputMessage1);
-        Serial.print(" - Set to: ");
-        Serial.println(inputMessage2);
-        request->send(200, "text/plain", "OK");
-    });
 
     // Start server
     server.begin();
