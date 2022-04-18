@@ -8,7 +8,19 @@ static bool hasSD = false;
 String csv_data = "";
 File csv_file;
 
+const int START_BUTTON = 22;
+
+const int VALVE_ENABLE = 4;
+const int VALVE_OPEN = 16;
+const int VALVE_CLOSE = 17;
+
+const int LED_TEST_STATUS = 12;
+const int LED_ERROR_STATUS = 13;
+const int LED_VALVE_STATUS = 14;
+
 void setupSD() {
+    
+  
     if (SD.begin(SS)) {
      Serial.println("SD Card initialized.");
       hasSD = true;
@@ -22,13 +34,9 @@ void setupSD() {
 }
 
 void setup() {
-
-  Serial.begin(115200);
-
-
+  Serial.begin(9600);
     if (SD.begin(SS)) {
      Serial.println("SD Card initialized.");
-
       File f = SD.open(testfile, FILE_READ);
 
       if (f) {
@@ -46,4 +54,6 @@ void setup() {
     }
 }
 
-void loop() {}
+void loop() {
+
+  }

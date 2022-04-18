@@ -8,12 +8,18 @@
 
 #include "FS.h"
 
-// Setup motor controller
-const uint8_t VALVE_ENABLE = 23;
-const int VALVE_OPEN = 22;
-const int VALVE_CLOSE = 21;
+// Define pins
+const int START_BUTTON = 22;
 
-const uint8_t SENSOR_PIN = 34;
+const int VALVE_ENABLE = 4;
+const int VALVE_OPEN = 16;
+const int VALVE_CLOSE = 17;
+
+const int LED_TEST_STATUS = 12;
+const int LED_ERROR_STATUS = 13;
+const int LED_VALVE_STATUS = 14;
+
+const int SENSOR_PIN = 34;
 
 // SD Card setup
 const char *OUTPUT_FILE = "/output.csv";
@@ -30,6 +36,11 @@ const char *input_parameter2 = "state";
 
 // Creating a AsyncWebServer object
 AsyncWebServer server(80);
+
+int counter = 0;
+bool valve_open = false;
+bool test_running = false;
+time_t start_time = 0;
 
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html>
@@ -96,7 +107,7 @@ setInterval(function ( ) {
 
 void setupSD() {
     if (SD.begin(SS)) {
-        Serial.println("SD Card initialized.");
+        // Serial.println("SD Card initialized.");
         hasSD = true;
         csv_file = SD.open(OUTPUT_FILE, FILE_WRITE);
 
@@ -121,8 +132,8 @@ void writeSD() {
             csv_file.print(",");
             csv_file.print(digitalRead(VALVE_OPEN));
             csv_file.print("\n");
-            Serial.println("Wrote to SD card at position " + String(csv_file.position()));
-            Serial.println("New file size: " + String(csv_file.size()));
+            // Serial.println("Wrote to SD card at position " + String(csv_file.position()));
+            // Serial.println("New file size: " + String(csv_file.size()));
 
             // printBuffer = String(millis()) + "," + String(readPressureSensor_RAW()) + "," + String(digitalRead(VALVE_OPEN)) + "\n";
 
@@ -133,20 +144,29 @@ void writeSD() {
 
             csv_file.close();
         } else {
-            Serial.println("Failed to open CSV File");
+            // Serial.println("Failed to open CSV File");
         }
     } else {
-        Serial.println("SD card not found... attempting setup");
+        // Serial.println("SD card not found... attempting setup");
         setupSD();
     }
 }
 
 void openValve() {
+    Serial.println("OPENING VALVE");
+    digitalWrite(LED_VALVE_STATUS, HIGH);
+    valve_open = true;
+
     digitalWrite(VALVE_OPEN, HIGH);
     digitalWrite(VALVE_CLOSE, LOW);
+
 }
 
 void closeValve() {
+    Serial.println("CLOSING VALVE");
+    digitalWrite(LED_VALVE_STATUS, LOW);
+    valve_open = false;
+
     digitalWrite(VALVE_OPEN, LOW);
     digitalWrite(VALVE_CLOSE, HIGH);
 }
@@ -177,7 +197,7 @@ String readPressureSensor() {
     result = total / count;
     count = 0;
 
-    Serial.printf("Processed read: %d\n", result);
+    // Serial.printf("Processed read: %d\n", result);
     return String(result);
 }
 
@@ -209,31 +229,38 @@ void setup() {
     // Serial port for debugging purposes
     Serial.begin(9600);
 
-    Serial.println("STARTING UP (wait 7 seconds)...");
+    Serial.println("STARTING UP (wait 5 seconds)...");
 
-    // Sleep 7 seconds
-    delay(7000);
+    // Sleep 5 seconds
+    delay(5000);
 
     Serial.println("STARTING UP");
 
     // Setup IO pins
+    pinMode(SENSOR_PIN, INPUT);
+    pinMode(START_BUTTON, INPUT);
     pinMode(VALVE_ENABLE, OUTPUT);
     pinMode(VALVE_OPEN, OUTPUT);
     pinMode(VALVE_CLOSE, OUTPUT);
-    pinMode(SENSOR_PIN, INPUT);
+    pinMode(LED_TEST_STATUS, OUTPUT);
+    pinMode(LED_ERROR_STATUS, OUTPUT);
+    pinMode(LED_VALVE_STATUS, OUTPUT);
+
+    digitalWrite(LED_ERROR_STATUS, LOW);
+    digitalWrite(LED_VALVE_STATUS, LOW);
+    digitalWrite(LED_TEST_STATUS, LOW);
+    digitalWrite(VALVE_ENABLE, HIGH);
 
     // Setup SD Output
     setupSD();
 
-    // Host AP
-    Serial.println();
-    Serial.println("Configuring access point...");
-    /* You can remove the password parameter if you want the AP to be open. */
+    // Setup Wireless AP
+    // Serial.println("\nConfiguring access point...");
     WiFi.softAP(ssid);
 
     IPAddress myIP = WiFi.softAPIP();
     Serial.print("AP IP address: ");
-    Serial.println(myIP);
+    // Serial.println(myIP);
 
     // Route for root / web page
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -248,7 +275,7 @@ void setup() {
         csv_file = SD.open(OUTPUT_FILE);
 
         String output_contents = csv_file.readString();
-        Serial.println(csv_file.readString());
+        // Serial.println(csv_file.readString());
         request->send(200, "text/html", output_contents);
         csv_file.close();
     });
@@ -291,7 +318,6 @@ void setup() {
             request->hasParam(input_parameter2)) {
             inputMessage1 = request->getParam(input_parameter1)->value();
             inputMessage2 = request->getParam(input_parameter2)->value();
-            // digitalWrite(inputMessage1.toInt(), inputMessage2.toInt());
 
             // Control valve
             if (inputMessage1.equals(String(VALVE_OPEN))) {
@@ -317,4 +343,24 @@ void setup() {
     server.begin();
 }
 
-void loop() {}
+void loop() {
+
+    if (digitalRead(START_BUTTON)) {
+        counter++;
+
+        if (counter > 10000 && millis() - start_time > 2000) {
+            if (valve_open) {
+                start_time = millis();
+                closeValve();
+            }
+            else {
+                start_time = millis();
+                openValve();
+            }
+        }
+    }
+    else
+    {
+        counter = 0;
+    }
+}
