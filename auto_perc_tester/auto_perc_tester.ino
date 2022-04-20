@@ -1,12 +1,3 @@
-void setup() {
-  // put your setup code here, to run once:
-
-}
-
-void loop() {
-  // put your main code here, to run repeatedly:
-
-}
 // Importing necessary libraries
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -14,54 +5,66 @@ void loop() {
 #include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
-
 #include "FS.h"
 
 // Define pins
 const int START_BUTTON = 22;
-
 const int VALVE_ENABLE = 4;
 const int VALVE_OPEN = 16;
 const int VALVE_CLOSE = 17;
-
 const int LED_TEST_STATUS = 12;
 const int LED_ERROR_STATUS = 13;
 const int LED_VALVE_STATUS = 14;
-
 const int SENSOR_PIN = 34;
 
 // SD Card setup
-const char *OUTPUT_FILE = "/output.csv";
+const char* OUTPUT_FILE = "/output.csv";
 static bool hasSD = false;
 String csv_data = "";
 File csv_file;
 
-// Setting network credentials
-const char *ssid = "percolation";
-const char *host = "percolation";
-
-const char *input_parameter1 = "output";
-const char *input_parameter2 = "state";
-
-// Creating a AsyncWebServer object
+// Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
+const char* SSID = "percolation";
 
-
+// IO variable declarations
+const int LOG_WRITE_INTERVAL = 1000;        // 1 second
+const int BUTTON_HOLD_THRESHOLD = 500;      // Approx 5 seconds
 bool valve_open = false;
 bool test_running = false;
+
 int button_counter = 0;
 time_t button_timer = 0;
-
-const int LOG_WRITE_INTERVAL = 1000;    // 1 second
 time_t log_timer = 0;
-
+time_t status_led_timer = 0;
+bool status_led_state = false;
 String error_message = "";
 
+// Define time constants (milliseconds)
+const int TEN_MINUTES = 600000;
+const int FOUR_HOURS = 14400000;
+
+// Test process variable declarations
+const int DRAIN_CYCLE_DEPTH_MAX = 300;
+const int DRAIN_CYCLE_DEPTH_MIN = 0;
+
+bool test_necessary = true;
+
+bool drain_cycle_initialized = false;
+
+int current_depth;
+time_t drain_cycle_time;
+time_t test_start_time;
+
+
+/**
+ * @brief Initializes the SD card
+ *
+ */
 void setupSD() {
     if (SD.begin(SS)) {
-        // Serial.println("SD Card initialized.");
         hasSD = true;
-        csv_file = SD.open(OUTPUT_FILE, FILE_WRITE);
+        csv_file = SD.open(OUTPUT_FILE, FILE_APPEND);
 
         // Write a new line to visually separate each new run
         csv_file.print("\n");
@@ -70,6 +73,10 @@ void setupSD() {
     }
 }
 
+/**
+ * @brief Writes the time and pressure sensor data to log
+ * If there's an error, updates error_message
+ */
 void write_log_file() {
     String printBuffer = "";
 
@@ -80,7 +87,7 @@ void write_log_file() {
             // Write to SD card in format: (time, pressure, valve status)
             csv_file.print(String(millis()));
             csv_file.print(",");
-            csv_file.print(readPressureSensor_RAW());
+            csv_file.print(String(readPressureSensor_RAW()));
             csv_file.print(",");
             csv_file.print(digitalRead(VALVE_OPEN));
             csv_file.print("\n");
@@ -96,6 +103,10 @@ void write_log_file() {
     }
 }
 
+/**
+ * @brief Opens the valve and updates the LED status
+ *
+ */
 void openValve() {
     Serial.println("OPENING VALVE");
     digitalWrite(LED_VALVE_STATUS, HIGH);
@@ -103,9 +114,12 @@ void openValve() {
 
     digitalWrite(VALVE_OPEN, HIGH);
     digitalWrite(VALVE_CLOSE, LOW);
-
 }
 
+/**
+ * @brief Closes the valve and updates the LED status
+ *
+ */
 void closeValve() {
     Serial.println("CLOSING VALVE");
     digitalWrite(LED_VALVE_STATUS, LOW);
@@ -115,21 +129,29 @@ void closeValve() {
     digitalWrite(VALVE_CLOSE, HIGH);
 }
 
-String readPressureSensor_RAW() {
-    return String(analogRead(SENSOR_PIN));
+/**
+ * @brief Reads the raw analog input from the pressure sensor
+ *
+ * @return the analog input
+ */
+int readPressureSensor_RAW() {
+    return analogRead(SENSOR_PIN);
 }
 
-String readPressureSensor() {
+/**
+ * @brief Reads the input from the pressure sensor and smooths it
+ *
+ * @return String the smoothed pressure sensor data
+ */
+int readPressureSensor() {
     // Used for averaging data output
-    static int PRINT_INTERVAL = 250;
-
-    unsigned long timepoint_measure = millis();
+    const int SMOOTHING_INTERVAL = 250;
     int total = 0;
     int count = 0;
     int raw_read;
     int result;
 
-    while (count < PRINT_INTERVAL) {
+    while (count < SMOOTHING_INTERVAL) {
         raw_read = analogRead(SENSOR_PIN);
         total += raw_read;
         count++;
@@ -138,7 +160,49 @@ String readPressureSensor() {
     result = total / count;
     count = 0;
 
-    return String(result);
+    return result;
+}
+
+/**
+ * @brief Converts a pressure sensor reading to depth in mm
+ *
+ * @param pressure input from pressure sensor
+ * @return the depth in mm
+ */
+float pressure_to_depth(int pressure) {
+    float depth = 0;
+
+    // TODO:
+
+    return depth;
+}
+
+/**
+ * @brief Fills the percolation hole to the specified depth by opening the valve
+ *
+ * @param depth depth in mm to fill the hole
+ */
+void fill_to_depth(float depth) {
+
+    // TODO:
+
+}
+
+/**
+ * @brief Ensures the drain cycle time is only initialized once even when running in loop
+ *
+ * @return time_t drain cycle time
+ */
+time_t initialize_drain_cycle_time() {
+
+    time_t time = drain_cycle_time;
+
+    if (!drain_cycle_initialized) {
+        drain_cycle_initialized = true;
+        time = millis();
+    }
+
+    return time;
 }
 
 void setup() {
@@ -172,36 +236,30 @@ void setup() {
     setupSD();
 
     // Setup Wireless AP
-    WiFi.softAP(ssid);
-
+    WiFi.softAP(SSID);
     IPAddress myIP = WiFi.softAPIP();
     Serial.print("AP IP address: ");
     Serial.println(myIP);
 
-    // Route for root / web page
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/html", index_html, processor);
-    });
-
+    // Route web end points:
     server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (!hasSD) {
             setupSD();
+            request->send(500, "text/html", "SD Card not found.");
         }
-
-        csv_file = SD.open(OUTPUT_FILE);
-
-        String output_contents = csv_file.readString();
-        // Serial.println(csv_file.readString());
-        request->send(200, "text/html", output_contents);
-        csv_file.close();
+        else {
+            csv_file = SD.open(OUTPUT_FILE);
+            request->send(200, "text/html", csv_file.readString());
+            csv_file.close();
+        }
     });
 
     server.on("/rawpressure", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/html", readPressureSensor_RAW());
+        request->send(200, "text/html", String(readPressureSensor_RAW()));
     });
 
     server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/html", readPressureSensor());
+        request->send(200, "text/html", String(readPressureSensor()));
     });
 
     server.on("/graph", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -214,6 +272,7 @@ void setup() {
             indexFile.close();
         } else {
             setupSD();
+            request->send(500, "text/html", "SD Card not found.");
         }
 
         request->send(200, "text/html", result);
@@ -227,39 +286,122 @@ void setup() {
 
 void loop() {
 
-
     // Start button check
     if (digitalRead(START_BUTTON)) {
         button_counter++;
 
-        if (button_counter > 10000 && millis() - button_timer > 2000) {
-            if (valve_open) {
-                button_timer = millis();
-                closeValve();
+        // Debounce button and hold for a few seconds
+        if ((button_counter > BUTTON_HOLD_THRESHOLD) && (millis() - button_timer > 2000)) {
+
+            // Reset timer
+            button_timer = millis();
+
+            // Toggle the test status
+            test_running = !test_running;
+
+            // Toggle the LED status
+            if (test_running) {
+                digitalWrite(LED_TEST_STATUS, HIGH);
+                test_start_time = millis();
             }
             else {
-                button_timer = millis();
-                openValve();
+                digitalWrite(LED_TEST_STATUS, LOW);
+            }
+        }
+        // Blink the status LED while the button is being held
+        else if ((button_counter > 50) && (button_counter < BUTTON_HOLD_THRESHOLD)) {
+
+            // Toggle LED based on time
+            if (button_counter % 50 > 25) {
+                digitalWrite(LED_TEST_STATUS, HIGH);
+            }
+            else {
+                digitalWrite(LED_TEST_STATUS, LOW);
             }
         }
     }
-    else
-    {
+    else {
         button_counter = 0;
     }
 
-
-    // TODO: blink status LED while test is ready to start
 
     // TODO: set the date/time on the RTC module ONCE, then retrieve it
 
     // TODO: create a new csv file with the date/time for each test
 
 
-    // TODO: write to log every 1 second
-    if (millis() - log_timer > LOG_WRITE_INTERVAL) {
-        log_timer = millis();
-        write_log_file();
+    // Check error status to update LED's
+    if (error_message.length() > 0) {
+        digitalWrite(LED_ERROR_STATUS, HIGH);
+        Serial.println(error_message);
+    }
+    else {
+        digitalWrite(LED_ERROR_STATUS, LOW);
     }
 
+
+    // Run the test
+    if (test_running) {
+
+        // Write to log every 1 second
+        if (millis() - log_timer > LOG_WRITE_INTERVAL) {
+            log_timer = millis();
+            write_log_file();
+        }
+
+
+
+        // TODO: write test procedure
+
+        // - - - Test first drain cycle - - -
+        // TODO: indicate in the log that first drain cycle is starting
+
+        // Fill borehole to 300mm
+        fill_to_depth(DRAIN_CYCLE_DEPTH_MAX);
+
+        // Record time to drain hold completely
+        drain_cycle_time = initialize_drain_cycle_time();
+
+        current_depth = pressure_to_depth(readPressureSensor());
+
+        while ((current_depth > 0) && (millis() - drain_cycle_time < FOUR_HOURS)) {
+            current_depth = pressure_to_depth(readPressureSensor());
+
+            // TODO: check for break condition (override button pressed)
+        }
+
+
+        // If time is less than 10 minutes, test is not necessary
+        if (millis() - drain_cycle_time < TEN_MINUTES) {
+            test_necessary = false;
+            test_running = false;
+
+            // TODO: elegantly end
+        }
+
+        // Otherwise proceed with the test
+        if (test_necessary) {
+
+        // Saturation mode:
+
+            // Fill to 300mm
+            // Auto record time and water level as water drops to 250mm
+            // Refill to 300mm upon hitting 250mm.
+            // Once the time of 3 consecutive saturation cycles are within 5% of each other, the saturation phase is complete
+
+            // If 4 hours have passed in saturation phase, move to the next mode
+            // Saturation mode can be manually completed by a switch/button
+
+        // Testing mode:
+
+            // Fill to 150mm
+            // Water level and time is auto recorded as the water level falls from 150mm to 50mm
+            // Refill to 150mm upon hitting 50mm.
+            // Once the time of 3 consecutive testing cycles are within 5% of each other, the test phase is complete
+
+        // Stability mode:
+            // The water level and time it takes for water to drain from 150mm to 50mm is auto recorded 5 times.
+
+        }
+    }
 }
