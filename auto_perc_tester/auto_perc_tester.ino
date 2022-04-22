@@ -66,6 +66,35 @@ const String MODE_COMPLETE = "Test Complete";
 const String MODE_UNNECESSARY = "Test not needed";
 String current_mode = MODE_PENDING;
 
+// Variables for saturation mode
+const int SATURATION_MODE_DEPTH_MAX = 300;
+const int SATURATION_MODE_DEPTH_MIN = 250;
+float over_fill_amount = 0.0;
+time_t saturation_start_time;
+time_t saturation_end_time;
+time_t saturation_mode_begin_time;
+bool saturation_complete = false;
+int cycle_count = 0;
+int current_index = 0;
+time_t prior_tests[2];
+
+
+/**
+ * @brief Helper function to increment index of prior_tests array
+ *
+ * @param current_index current index of the array
+ * @return int next index to write to
+ */
+int next_test_index(int current_index) {
+    current_index++;
+
+    if (current_index > 2) {
+        current_index = 0;
+    }
+
+    return current_index;
+}
+
 
 /**
  * @brief Initializes the SD card
@@ -181,8 +210,8 @@ int readPressureSensor() {
  */
 float pressure_to_depth(int pressure) {
     // These constants were determined by lab tests with a meter stick
-    const double SLOPE = 0.794;
-    const int OFFSET = 131;
+    const double SLOPE = 0.198;
+    const int OFFSET = 89;
     const int MM_IN_CM = 10;
 
     float depth = (pressure * SLOPE - OFFSET) * MM_IN_CM;
@@ -194,13 +223,40 @@ float pressure_to_depth(int pressure) {
  * @brief Fills the percolation hole to the specified depth by opening the valve
  *
  * @param depth depth in mm to fill the hole
+ * @return the amount of water (mm) that it was overfilled by due to time to close valve
  */
-void fill_to_depth(float depth) {
-    const float VALVE_OPEN_TIME = 1.0;      // TODO: determine this in testing
+time_t fill_to_depth(float target_depth) {
+    const float VALVE_TOGGLE_TIME = 3000.0;      // TODO: determine this in testing
+    float current_depth = pressure_to_depth(readPressureSensor());
+    time_t stop_time;
 
     // TODO: might have to define constants for time it takes to fill to X height, could be function or constant
 
+// Open valve
+// Close when depth reaches target depth
+// Wait about 4 seconds after we close the valve for water to trickle through
+// Read depth
+// Record over_fill_amount (mm) from water left in hose
+// Add the over_fill_amount to the end goal
 
+    openValve();
+
+    while (current_depth < target_depth) {
+        current_depth = pressure_to_depth(readPressureSensor());
+    }
+
+    closeValve();
+    stop_time = millis();
+
+    delay(VALVE_TOGGLE_TIME);
+
+    current_depth = pressure_to_depth(readPressureSensor());
+
+    over_fill_amount = current_depth - target_depth;
+
+    // Return 0 if below target depth (error)
+    // return max(0, over_fill_amount);
+    return stop_time;
 }
 
 /**
@@ -381,7 +437,7 @@ void loop() {
         // - - - Test first drain cycle - - -
         // TODO: indicate in the log that first drain cycle is starting
 
-        current_mode = FIRST_DRAIN_CYCLE;
+        current_mode = MODE_DRAIN_CYCLE;
 
         // Fill borehole to 300mm
         fill_to_depth(DRAIN_CYCLE_DEPTH_MAX);
@@ -409,14 +465,47 @@ void loop() {
         if (test_necessary) {
 
         // Saturation mode:
+            current_mode = MODE_SATURATION;
+            saturation_mode_begin_time = millis();
 
-            // Fill to 300mm
-            // Auto record time and water level as water drops to 250mm
-            // Refill to 300mm upon hitting 250mm.
-            // Once the time of 3 consecutive saturation cycles are within 5% of each other, the saturation phase is complete
+            while (!saturation_complete && (millis() - saturation_mode_begin_time < FOUR_HOURS)) {
 
-            // If 4 hours have passed in saturation phase, move to the next mode
-            // Saturation mode can be manually completed by a switch/button
+                cycle_count++;
+
+                // Fill to 300mm
+                saturation_start_time = fill_to_depth(SATURATION_MODE_DEPTH_MAX);
+
+                // Auto record time and water level as water drops to 250mm
+
+                // Wait until depth is at 250 + offset
+                current_depth = pressure_to_depth(readPressureSensor());
+
+                while (current_depth > SATURATION_MODE_DEPTH_MIN + over_fill_amount) {
+                    current_depth = pressure_to_depth(readPressureSensor());
+
+                    // TODO: add a break condition
+                }
+
+                saturation_end_time = millis();
+
+                prior_tests[current_index] = saturation_end_time;
+
+                current_index = next_test_index(current_index);
+
+
+                // Once the time of 3 consecutive saturation cycles are within 5% of each other, the saturation phase is complete
+                if (cycle_count > 3) {
+
+                    // If all 3 prior tests are within 5% of each other, saturation is complete
+                    // TODO: verify if this check is correct
+                    if (abs(prior_tests[2] - prior_tests[1]) < (prior_tests[0] * 0.05)) {
+                        saturation_complete = true;
+                    }
+                }
+
+                // TODO: add a break condition
+                // Saturation mode can be manually completed by a switch/button
+            }
 
         // Testing mode:
 
