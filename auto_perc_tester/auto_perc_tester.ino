@@ -56,6 +56,16 @@ int current_depth;
 time_t drain_cycle_time;
 time_t test_start_time;
 
+// State constants for web interface
+const String MODE_PENDING = "Awaiting Start";
+const String MODE_DRAIN_CYCLE = "First Drain Cycle";
+const String MODE_SATURATION = "Saturation Mode";
+const String MODE_TEST = "Test Running";
+const String MODE_STABILITY = "Stability Mode";
+const String MODE_COMPLETE = "Test Complete";
+const String MODE_UNNECESSARY = "Test not needed";
+String current_mode = MODE_PENDING;
+
 
 /**
  * @brief Initializes the SD card
@@ -170,9 +180,12 @@ int readPressureSensor() {
  * @return the depth in mm
  */
 float pressure_to_depth(int pressure) {
-    float depth = 0;
+    // These constants were determined by lab tests with a meter stick
+    const double SLOPE = 0.794;
+    const int OFFSET = 131;
+    const int MM_IN_CM = 10;
 
-    // TODO:
+    float depth = (pressure * SLOPE - OFFSET) * MM_IN_CM;
 
     return depth;
 }
@@ -183,8 +196,10 @@ float pressure_to_depth(int pressure) {
  * @param depth depth in mm to fill the hole
  */
 void fill_to_depth(float depth) {
+    const float VALVE_OPEN_TIME = 1.0;      // TODO: determine this in testing
 
-    // TODO:
+    // TODO: might have to define constants for time it takes to fill to X height, could be function or constant
+
 
 }
 
@@ -262,6 +277,14 @@ void setup() {
         request->send(200, "text/html", String(readPressureSensor()));
     });
 
+    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", current_mode);
+    });
+
+    server.on("/error", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", error_message);
+    });
+
     server.on("/graph", HTTP_GET, [](AsyncWebServerRequest *request) {
         File indexFile;
         String result = "Pending SD Card...";
@@ -277,6 +300,8 @@ void setup() {
 
         request->send(200, "text/html", result);
     });
+
+
 
     server.serveStatic("/", SD, "/");
 
@@ -356,6 +381,8 @@ void loop() {
         // - - - Test first drain cycle - - -
         // TODO: indicate in the log that first drain cycle is starting
 
+        current_mode = FIRST_DRAIN_CYCLE;
+
         // Fill borehole to 300mm
         fill_to_depth(DRAIN_CYCLE_DEPTH_MAX);
 
@@ -373,10 +400,9 @@ void loop() {
 
         // If time is less than 10 minutes, test is not necessary
         if (millis() - drain_cycle_time < TEN_MINUTES) {
+            current_mode = MODE_UNNECESSARY;
             test_necessary = false;
             test_running = false;
-
-            // TODO: elegantly end
         }
 
         // Otherwise proceed with the test
@@ -402,6 +428,9 @@ void loop() {
         // Stability mode:
             // The water level and time it takes for water to drain from 150mm to 50mm is auto recorded 5 times.
 
+        }
+        else {
+            // TODO: elegantly end
         }
     }
 }
