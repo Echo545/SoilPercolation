@@ -11,14 +11,15 @@ copies or substantial portions of the Software. -->
   <script type="text/javascript" src="exporting.js"></script>
   <script type="text/javascript" src="boost.js"></script>
   <script type="text/javascript" src="export-data.js"></script>
+  <script type="text/javascript" src="data.js"></script>
 
   <style>
-    body {
+    /* body {
       min-width: 310px;
     	max-width: 800px;
     	height: 400px;
       margin: 0 auto;
-    }
+    } */
     h2 {
       font-family: Arial;
       font-size: 2.5rem;
@@ -30,20 +31,49 @@ copies or substantial portions of the Software. -->
       padding: 1em;
       color: green;
     }
+
+    .nav ul {display: flex; background-color: #444;
+             margin: 0;}
+    .nav li {display: flex; list-style: none; font-family: 'Oswald', sans-serif;
+             font-size: 1.2em; line-height: 40px; height: 40px; border-bottom: 1px solid #888;
+             padding: 18px 30px;}
+    .nav a {text-decoration: none; color: white; font-size: 2.5vw;}
+    .nav li a:hover {color: black;}
+    .heading {font-size: 3vw;}
+    .pressureReading {font-size: 2vw; font-family: 'Franklin Gothic Medium', Arial; color:darkred;}
   </style>
 </head>
 <body>
-  <h2>ESP Pressure</h2>
+  <div class="nav">
+    <ul>
+      <li><a href="index.htm">Home</a></li>
+      <li><a href="sdContents\index.htm">csv_download</a></li>
+      <li><a href="graph.htm">Live Graph</a></li>
+    </ul>
+  </div>
+
+  <h2 class="heading">ESP Pressure</h2>
 
   <hr>
 
-  <h4>Raw Pressure:</h4>
+  <h4 class="pressureReading">Raw Pressure:</h4>
 
   <div id="chart-pressure-raw" class="container"></div>
 
-  <h4>Processed Pressure:</h4>
+  <h4 class="pressureReading">Processed Pressure:</h4>
 
   <div id="chart-pressure" class="container"></div>
+
+  <h4 class="pressureReading">Depth</h4>
+
+  <div id="chart-depth" class="container"></div>
+
+  <h4 class="pressureReading">CSV Data</h4>
+
+
+  <div id="chart-csv" class="container"></div>
+
+
 
   <br>
 
@@ -70,11 +100,10 @@ var chartRawPressure = new Highcharts.Chart({
   },
   xAxis: {
     type: 'datetime',
-    dateTimeLabelFormats: { second: '%H:%M:%S' }
+    dateTimeLabelFormats: { second: '%H:%M:%S' },
+    // minRange: 30000
   },
   yAxis: {
-    min: 421,
-    max: 490,
     title: { text: 'Raw Pressure' }
   },
   credits: { enabled: false }
@@ -95,7 +124,7 @@ setInterval(function ( ) {
   };
   xhttp.open("GET", "/rawpressure", true);
   xhttp.send();
-}, 100 ) ;
+}, 150 ) ;
 
 var chartPressure = new Highcharts.Chart({
   chart:{ renderTo:'chart-pressure' },
@@ -113,11 +142,10 @@ var chartPressure = new Highcharts.Chart({
   },
   xAxis: {
     type: 'datetime',
-    dateTimeLabelFormats: { second: '%H:%M:%S' }
+    dateTimeLabelFormats: { second: '%H:%M:%S' },
+    // minRange: 30000
   },
   yAxis: {
-    min: 421,
-    max: 490,
     title: { text: 'Pressure' }
   },
   credits: { enabled: false }
@@ -138,6 +166,62 @@ setInterval(function ( ) {
   };
   xhttp.open("GET", "/pressure", true);
   xhttp.send();
-}, 100 ) ;
+}, 150 ) ;
+
+
+var chartDepth = new Highcharts.Chart({
+  chart:{ renderTo:'chart-depth' },
+  title: { text: 'depth' },
+  series: [{
+    showInLegend: false,
+    name: 'depth',
+    data: []
+  }],
+  plotOptions: {
+    line: { animation: false,
+      dataLabels: { enabled: true }
+    },
+    series: { color: '#18009c' }
+  },
+  xAxis: {
+    type: 'datetime',
+    dateTimeLabelFormats: { second: '%H:%M:%S' },
+    // minRange: 30000
+  },
+  yAxis: {
+    title: { text: 'depth' }
+  },
+  credits: { enabled: false },
+  zoomType: 'all',
+});
+setInterval(function ( ) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      var x = (new Date()).getTime(),
+          y = parseFloat(this.responseText);
+      //console.log(this.responseText);
+      if(chartDepth.series[0].data.length > 40) {
+        chartDepth.series[0].addPoint([x, y], true, true, true);
+      } else {
+        chartDepth.series[0].addPoint([x, y], true, false, true);
+      }
+    }
+  };
+  xhttp.open("GET", "/depth", true);
+  xhttp.send();
+}, 150 ) ;
+
+var csvChart = new Highcharts.Chart('chart-csv',{
+  chart:{ renderTo:'chart-csv' },
+  title: { text: 'csv' },
+  credits: { enabled: false },
+  data: {
+    csvURL: '/output.csv',
+    enablePolling: true
+  }
+});
+
+
 </script>
 </html>

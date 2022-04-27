@@ -5,6 +5,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+
 #include "FS.h"
 
 // Define pins
@@ -17,19 +18,21 @@ const int LED_ERROR_STATUS = 13;
 const int LED_VALVE_STATUS = 14;
 const int SENSOR_PIN = 34;
 
+const int ADC_TEST_PIN = 33;
+
 // SD Card setup
-const char* OUTPUT_FILE = "/output.csv";
+const char *OUTPUT_FILE = "/output.csv";
 static bool hasSD = false;
 String csv_data = "";
 File csv_file;
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
-const char* SSID = "percolation";
+const char *SSID = "percolation";
 
 // IO variable declarations
-const int LOG_WRITE_INTERVAL = 1000;        // 1 second
-const int BUTTON_HOLD_THRESHOLD = 500;      // Approx 5 seconds
+const int LOG_WRITE_INTERVAL = 1000;    // 1 second
+const int BUTTON_HOLD_THRESHOLD = 500;  // Approx 5 seconds
 bool valve_open = false;
 bool test_running = false;
 
@@ -51,10 +54,10 @@ const int DRAIN_CYCLE_DEPTH_MIN = 0;
 bool test_necessary = true;
 
 bool drain_cycle_initialized = false;
+bool skip_drain_cycle = false;
 
 int current_depth;
 time_t drain_cycle_time;
-time_t test_start_time;
 
 // State constants for web interface
 const String MODE_PENDING = "Awaiting Start";
@@ -78,6 +81,21 @@ int cycle_count = 0;
 int current_index = 0;
 time_t prior_tests[2];
 
+// Variables for testing mode
+const int TEST_MODE_DEPTH_MAX = 150;
+const int TEST_MODE_DEPTH_MIN = 50;
+bool test_complete = false;
+time_t test_start_time;
+time_t test_end_time;
+time_t test_mode_begin_time;
+
+// Variables for stability mode
+const int STABILITY_MODE_DEPTH_MAX = 150;
+const int STABILITY_MODE_DEPTH_MIN = 50;
+bool stability_complete = false;
+time_t stability_start_time;
+time_t stability_end_time;
+time_t stability_mode_begin_time;
 
 /**
  * @brief Helper function to increment index of prior_tests array
@@ -94,7 +112,6 @@ int next_test_index(int current_index) {
 
     return current_index;
 }
-
 
 /**
  * @brief Initializes the SD card
@@ -127,8 +144,8 @@ void write_log_file() {
             csv_file.print(String(millis()));
             csv_file.print(",");
             csv_file.print(String(readPressureSensor_RAW()));
-            csv_file.print(",");
-            csv_file.print(digitalRead(VALVE_OPEN));
+            // csv_file.print(",");
+            // csv_file.print(digitalRead(VALVE_OPEN));
             csv_file.print("\n");
 
             csv_file.close();
@@ -174,8 +191,17 @@ void closeValve() {
  * @return the analog input
  */
 int readPressureSensor_RAW() {
-    return analogRead(SENSOR_PIN);
-}
+        int raw_sensor_read = analogRead(SENSOR_PIN);
+        int offset_read = analogRead(ADC_TEST_PIN);
+
+        // Serial.print("Raw sensor read: ");
+        Serial.println(raw_sensor_read);
+
+        // Serial.print("Offset read: ");
+        // Serial.println(raw_sensor_read - offset_read);
+
+        return raw_sensor_read;
+    }
 
 /**
  * @brief Reads the input from the pressure sensor and smooths it
@@ -191,7 +217,7 @@ int readPressureSensor() {
     int result;
 
     while (count < SMOOTHING_INTERVAL) {
-        raw_read = analogRead(SENSOR_PIN);
+        raw_read = readPressureSensor_RAW();
         total += raw_read;
         count++;
     }
@@ -223,21 +249,21 @@ float pressure_to_depth(int pressure) {
  * @brief Fills the percolation hole to the specified depth by opening the valve
  *
  * @param depth depth in mm to fill the hole
- * @return the amount of water (mm) that it was overfilled by due to time to close valve
+ * @return the time (in ms) that the valve started closing
  */
 time_t fill_to_depth(float target_depth) {
-    const float VALVE_TOGGLE_TIME = 3000.0;      // TODO: determine this in testing
+    const float VALVE_TOGGLE_TIME = 3000.0;  // TODO: determine this in testing
     float current_depth = pressure_to_depth(readPressureSensor());
     time_t stop_time;
 
-    // TODO: might have to define constants for time it takes to fill to X height, could be function or constant
+    // TODO: might have to define constants for time it takes to fill to X
+    // height, could be function or constant
 
-// Open valve
-// Close when depth reaches target depth
-// Wait about 4 seconds after we close the valve for water to trickle through
-// Read depth
-// Record over_fill_amount (mm) from water left in hose
-// Add the over_fill_amount to the end goal
+    // Open valve
+    // Close when depth reaches target depth
+    // Wait about 4 seconds after we close the valve for water to trickle
+    // through Read depth Record over_fill_amount (mm) from water left in hose
+    // Add the over_fill_amount to the end goal
 
     openValve();
 
@@ -252,20 +278,21 @@ time_t fill_to_depth(float target_depth) {
 
     current_depth = pressure_to_depth(readPressureSensor());
 
+    // set overflow amount, can't be 0
+    // over_fill_amount = max(current_depth - target_depth, 0.0);
     over_fill_amount = current_depth - target_depth;
 
     // Return 0 if below target depth (error)
-    // return max(0, over_fill_amount);
     return stop_time;
 }
 
 /**
- * @brief Ensures the drain cycle time is only initialized once even when running in loop
+ * @brief Ensures the drain cycle time is only initialized once even when
+ * running in loop
  *
  * @return time_t drain cycle time
  */
 time_t initialize_drain_cycle_time() {
-
     time_t time = drain_cycle_time;
 
     if (!drain_cycle_initialized) {
@@ -274,6 +301,65 @@ time_t initialize_drain_cycle_time() {
     }
 
     return time;
+}
+
+/**
+ * @brief Returns true if the debounced button is pressed
+ * Also blinks the LED_TEST_STATUS while being held
+ *
+ * @note because this is being called in loop(), all variables are defined globally
+ * outside of this function
+ *
+ * @return true if button is pressed
+ */
+bool button_check() {
+
+    bool pressed = false;
+
+    if (digitalRead(START_BUTTON)) {
+        button_counter++;
+
+        // Debounce button and hold for a few seconds
+        if ((button_counter > BUTTON_HOLD_THRESHOLD) &&
+            (millis() - button_timer > 2000)) {
+            // Reset timer
+            button_timer = millis();
+
+            pressed = true;
+
+            // Toggle the LED status
+            if (test_running) {
+                digitalWrite(LED_TEST_STATUS, HIGH);
+                test_start_time = millis();
+            } else {
+                digitalWrite(LED_TEST_STATUS, LOW);
+            }
+        }
+        // Blink the status LED while the button is being held
+        else if ((button_counter > 50) &&
+                 (button_counter < BUTTON_HOLD_THRESHOLD)) {
+            // Toggle LED based on time
+            if (button_counter % 50 > 25) {
+                digitalWrite(LED_TEST_STATUS, HIGH);
+            } else {
+                digitalWrite(LED_TEST_STATUS, LOW);
+            }
+        }
+    } else {
+        button_counter = 0;
+    }
+
+    return pressed;
+}
+
+/**
+ * @brief Writes to the log file no more than once a second
+ */
+void log() {
+    if (millis() - log_timer > LOG_WRITE_INTERVAL) {
+        log_timer = millis();
+        write_log_file();
+    }
 }
 
 void setup() {
@@ -317,8 +403,7 @@ void setup() {
         if (!hasSD) {
             setupSD();
             request->send(500, "text/html", "SD Card not found.");
-        }
-        else {
+        } else {
             csv_file = SD.open(OUTPUT_FILE);
             request->send(200, "text/html", csv_file.readString());
             csv_file.close();
@@ -341,6 +426,11 @@ void setup() {
         request->send(200, "text/html", error_message);
     });
 
+    server.on("/depth", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/html",
+                      String(pressure_to_depth(readPressureSensor())));
+    });
+
     server.on("/graph", HTTP_GET, [](AsyncWebServerRequest *request) {
         File indexFile;
         String result = "Pending SD Card...";
@@ -357,8 +447,6 @@ void setup() {
         request->send(200, "text/html", result);
     });
 
-
-
     server.serveStatic("/", SD, "/");
 
     // Start server
@@ -368,70 +456,29 @@ void setup() {
 void loop() {
 
     // Start button check
-    if (digitalRead(START_BUTTON)) {
-        button_counter++;
+    if (button_check()) {
 
-        // Debounce button and hold for a few seconds
-        if ((button_counter > BUTTON_HOLD_THRESHOLD) && (millis() - button_timer > 2000)) {
-
-            // Reset timer
-            button_timer = millis();
-
-            // Toggle the test status
-            test_running = !test_running;
-
-            // Toggle the LED status
-            if (test_running) {
-                digitalWrite(LED_TEST_STATUS, HIGH);
-                test_start_time = millis();
-            }
-            else {
-                digitalWrite(LED_TEST_STATUS, LOW);
-            }
-        }
-        // Blink the status LED while the button is being held
-        else if ((button_counter > 50) && (button_counter < BUTTON_HOLD_THRESHOLD)) {
-
-            // Toggle LED based on time
-            if (button_counter % 50 > 25) {
-                digitalWrite(LED_TEST_STATUS, HIGH);
-            }
-            else {
-                digitalWrite(LED_TEST_STATUS, LOW);
-            }
-        }
-    }
-    else {
-        button_counter = 0;
+        // Toggle the test status
+        test_running = !test_running;
     }
 
+    log();
 
     // TODO: set the date/time on the RTC module ONCE, then retrieve it
 
     // TODO: create a new csv file with the date/time for each test
 
-
-    // Check error status to update LED's
+    // Check error status
     if (error_message.length() > 0) {
         digitalWrite(LED_ERROR_STATUS, HIGH);
+        test_running = false;
         Serial.println(error_message);
-    }
-    else {
+    } else {
         digitalWrite(LED_ERROR_STATUS, LOW);
     }
 
-
     // Run the test
     if (test_running) {
-
-        // Write to log every 1 second
-        if (millis() - log_timer > LOG_WRITE_INTERVAL) {
-            log_timer = millis();
-            write_log_file();
-        }
-
-
-
         // TODO: write test procedure
 
         // - - - Test first drain cycle - - -
@@ -447,12 +494,14 @@ void loop() {
 
         current_depth = pressure_to_depth(readPressureSensor());
 
-        while ((current_depth > 0) && (millis() - drain_cycle_time < FOUR_HOURS)) {
+        while ((current_depth > 0)
+                && (millis() - drain_cycle_time < FOUR_HOURS)
+                && !skip_drain_cycle) {
             current_depth = pressure_to_depth(readPressureSensor());
 
-            // TODO: check for break condition (override button pressed)
+            skip_drain_cycle = button_check();
+            log();
         }
-
 
         // If time is less than 10 minutes, test is not necessary
         if (millis() - drain_cycle_time < TEN_MINUTES) {
@@ -463,13 +512,12 @@ void loop() {
 
         // Otherwise proceed with the test
         if (test_necessary) {
-
-        // Saturation mode:
+            // Saturation mode:
             current_mode = MODE_SATURATION;
             saturation_mode_begin_time = millis();
 
-            while (!saturation_complete && (millis() - saturation_mode_begin_time < FOUR_HOURS)) {
-
+            while (!saturation_complete &&
+                   (millis() - saturation_mode_begin_time < FOUR_HOURS) && test_running) {
                 cycle_count++;
 
                 // Fill to 300mm
@@ -480,10 +528,13 @@ void loop() {
                 // Wait until depth is at 250 + offset
                 current_depth = pressure_to_depth(readPressureSensor());
 
-                while (current_depth > SATURATION_MODE_DEPTH_MIN + over_fill_amount) {
+                while (!saturation_complete && current_depth >
+                       SATURATION_MODE_DEPTH_MIN + over_fill_amount) {
+
                     current_depth = pressure_to_depth(readPressureSensor());
 
-                    // TODO: add a break condition
+                    saturation_complete = button_check();
+                    log();
                 }
 
                 saturation_end_time = millis();
@@ -492,34 +543,92 @@ void loop() {
 
                 current_index = next_test_index(current_index);
 
-
-                // Once the time of 3 consecutive saturation cycles are within 5% of each other, the saturation phase is complete
+                // Once the time of 3 consecutive saturation cycles are within
+                // 5% of each other, the saturation phase is complete
                 if (cycle_count > 3) {
-
-                    // If all 3 prior tests are within 5% of each other, saturation is complete
+                    // If all 3 prior tests are within 5% of each other,
+                    // saturation is complete
                     // TODO: verify if this check is correct
-                    if (abs(prior_tests[2] - prior_tests[1]) < (prior_tests[0] * 0.05)) {
+                    if (abs(prior_tests[2] - prior_tests[1]) <
+                        (prior_tests[0] * 0.05)) {
                         saturation_complete = true;
                     }
                 }
 
-                // TODO: add a break condition
-                // Saturation mode can be manually completed by a switch/button
+                // Break condition
+                // Saturation mode can be manually completed by button
+                saturation_complete = button_check();
             }
 
-        // Testing mode:
+            // Testing mode:
+            current_mode = MODE_TEST;
+            test_mode_begin_time = millis();
+            cycle_count = 0;
 
-            // Fill to 150mm
-            // Water level and time is auto recorded as the water level falls from 150mm to 50mm
-            // Refill to 150mm upon hitting 50mm.
-            // Once the time of 3 consecutive testing cycles are within 5% of each other, the test phase is complete
+            while (!test_complete) {
+                cycle_count++;
 
-        // Stability mode:
-            // The water level and time it takes for water to drain from 150mm to 50mm is auto recorded 5 times.
+                // Fill to 150mm
+                test_start_time = fill_to_depth(TEST_MODE_DEPTH_MAX);
 
-        }
-        else {
+                // Wait until depth is at 50 + offset
+                current_depth = pressure_to_depth(readPressureSensor());
+
+                while (current_depth > TEST_MODE_DEPTH_MIN + over_fill_amount) {
+                    current_depth = pressure_to_depth(readPressureSensor());
+
+                    // TODO: add a break condition
+
+                }
+
+                test_end_time = millis();
+
+                prior_tests[current_index] = test_end_time;
+
+                current_index = next_test_index(current_index);
+
+                if (cycle_count > 3) {
+                    // TODO: verify if this check is correct
+                    if (abs(prior_tests[2] - prior_tests[1]) <
+                        (prior_tests[0] * 0.05)) {
+                        test_complete = true;
+                    }
+                }
+            }
+
+            // Water level and time is auto recorded as the water level falls
+            // from 150mm to 50mm Refill to 150mm upon hitting 50mm. Once the
+            // time of 3 consecutive testing cycles are within 5% of each other,
+            // the test phase is complete
+
+            // Stability mode:
+            // The water level and time it takes for water to drain from 150mm
+            // to 50mm is auto recorded 5 times.
+
+            current_mode = MODE_STABILITY;
+            stability_mode_begin_time = millis();
+            cycle_count = 0;
+
+            while (!stability_complete) {
+                for (int i = 0; i < 5; i++) {
+                    cycle_count++;
+
+                    // Fill to 150mm
+                    stability_start_time = fill_to_depth(STABILITY_MODE_DEPTH_MAX);
+
+                    // Wait until depth is at 50 + offset
+                    current_depth = pressure_to_depth(readPressureSensor());
+                }
+            }
+        } else {
             // TODO: elegantly end
         }
+
+        current_mode = MODE_COMPLETE;
     }
+
+    // TESTING SEGMENT:
+    // Serial.println(readPressureSensor());
+    // readPressureSensor();
+    readPressureSensor_RAW();
 }
