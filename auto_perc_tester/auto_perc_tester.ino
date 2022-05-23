@@ -33,7 +33,7 @@ const char *SSID = "percolation";
 const int LOG_WRITE_INTERVAL = 1000;    // 1 second
 bool valve_open = false;
 bool test_running = false;
-int button_counter = 0; 
+int button_counter = 0;
 time_t button_timer = 0;
 time_t log_timer = 0;
 String error_message = "";
@@ -96,6 +96,36 @@ int previous_readings[PREV_READINGS_SIZE];
 bool sample_recorded = false;
 int prior_processed_read = 0;
 
+/**
+ * @brief Reads the pressure sensor with an adjusted offset due to the way the
+ * ADC in Wokwi functions
+ *
+ * @return uint32_t the adjusted analog input from the pressure sensor
+ */
+uint32_t read_virtual_pressure() {
+    // expected - actual       | mult factor
+    // 446 - 1826              | 0.2442497
+    // 520 - 2129              | 0.2442461
+    // 760 - 3112              | 0.2442159
+    // 1000 - 4095             | 0.2442002
+
+    // out of water default should be 446
+    return analogRead(SENSOR_PIN) * 0.2442 + 1;
+}
+
+/**
+ * @brief Connects to the virtual network when testing in Wokwi
+ *
+ */
+void setup_virtual_wifi() {
+    Serial.print("Connecting to WiFi");
+    WiFi.begin("Wokwi-GUEST", "", 6);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(100);
+        Serial.print(".");
+    }
+    Serial.println(" Connected!");
+}
 
 /**
  * @brief Helper function to increment index of prior_tests array
@@ -187,7 +217,7 @@ void close_valve() {
  * @return the analog input
  */
 int readPressureSensor_RAW() {
-        int raw_sensor_read = analogRead(SENSOR_PIN);
+        int raw_sensor_read = read_virtual_pressure();
 
         // For debugging
         // Serial.print("Raw sensor read: ");
@@ -202,6 +232,7 @@ int readPressureSensor_RAW() {
  * @return String the smoothed pressure sensor data
  */
 int readPressureSensor() {
+    // Used for averaging data output
     time_t pressure_average_timer = millis();
     const int SMOOTHING_INTERVAL = 200;
     int total = 0;
@@ -299,10 +330,10 @@ int readPressureSensor() {
 
 /**
  * @brief Returns true if the new pressure given is within the boundry percentage of the average of the previous 10 tests
- * 
+ *
  * @note Boundry can be changed to fit current needs inorder to avoid recording noise
  *
- * @param pressure New Raw pressure reading  
+ * @param pressure New Raw pressure reading
  * @return true if all tests were within the boundry
  */
 bool is_within_boundry(int pressure) {
@@ -517,10 +548,12 @@ void setup() {
     setupSD();
 
     // Setup Wireless AP
-    WiFi.softAP(SSID);
-    IPAddress myIP = WiFi.softAPIP();
-    Serial.print("AP IP address: ");
-    Serial.println(myIP);
+    // WiFi.softAP(SSID);
+    // IPAddress myIP = WiFi.softAPIP();
+    // Serial.print("AP IP address: ");
+    // Serial.println(myIP);
+
+    setup_virtual_wifi();
 
     // Route web end points:
     server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -590,7 +623,7 @@ void loop() {
         update_status_led();
         log();
     }
-    
+
     // Record the time when the test starts
     if (test_running) {
         test_start_time = millis();
@@ -609,7 +642,7 @@ void loop() {
     // Run the test
     if (test_running) {
         // - - - - - - Test first drain cycle - - - - - -
-        current_mode = MODE_DRAIN_CYCLE;        
+        current_mode = MODE_DRAIN_CYCLE;
         Serial.println((String) "New mode: " + current_mode);
 
         // Fill borehole to 300mm
