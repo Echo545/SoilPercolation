@@ -31,15 +31,11 @@ const char *SSID = "percolation";
 
 // IO variable declarations
 const int LOG_WRITE_INTERVAL = 1000;    // 1 second
-const int BUTTON_HOLD_THRESHOLD = 500;  // Approx 5 seconds
 bool valve_open = false;
 bool test_running = false;
-
-int button_counter = 0;
+int button_counter = 0; 
 time_t button_timer = 0;
 time_t log_timer = 0;
-time_t status_led_timer = 0;
-bool status_led_state = false;
 String error_message = "";
 
 // Define time constants (milliseconds)
@@ -48,11 +44,7 @@ const int FOUR_HOURS = 14400000;
 
 // Test process variable declarations
 const int DRAIN_CYCLE_DEPTH_MAX = 300;
-const int DRAIN_CYCLE_DEPTH_MIN = 0;
-
 bool test_necessary = true;
-
-bool drain_cycle_initialized = false;
 bool skip_drain_cycle = false;
 
 int current_depth;
@@ -97,6 +89,13 @@ time_t stability_start_time;
 time_t stability_end_time;
 time_t stability_mode_begin_time;
 
+// Variables for processing raw pressure
+const int PREV_READINGS_SIZE = 50;
+int previous_readings_index = 0;
+int previous_readings[PREV_READINGS_SIZE];
+bool sample_recorded = false;
+int prior_processed_read = 0;
+
 
 /**
  * @brief Helper function to increment index of prior_tests array
@@ -135,8 +134,6 @@ void setupSD() {
  * If there's an error, updates error_message
  */
 void write_log_file() {
-    String printBuffer = "";
-
     if (hasSD) {
         csv_file = SD.open(OUTPUT_FILE, FILE_APPEND);
 
@@ -192,8 +189,9 @@ void close_valve() {
 int readPressureSensor_RAW() {
         int raw_sensor_read = analogRead(SENSOR_PIN);
 
-        Serial.print("Raw sensor read: ");
-        Serial.println(raw_sensor_read);
+        // For debugging
+        // Serial.print("Raw sensor read: ");
+        // Serial.println(raw_sensor_read);
 
         return raw_sensor_read;
     }
@@ -204,26 +202,140 @@ int readPressureSensor_RAW() {
  * @return String the smoothed pressure sensor data
  */
 int readPressureSensor() {
-    // Used for averaging data output
     time_t pressure_average_timer = millis();
     const int SMOOTHING_INTERVAL = 200;
     int total = 0;
     int count = 0;
-    int raw_read;
+    int current_pressure;
     int result;
+    bool encountered_out_of_bounds_reading = false;
 
     while (millis() - pressure_average_timer < SMOOTHING_INTERVAL) {
-        total += readPressureSensor_RAW();
+        current_pressure = readPressureSensor_RAW();
+
+        // Keep running average of previous 50 RAW reads to detect invalid pressure readings
+
+        // Update list of prior tests if test is running
+        if (test_running) {
+            previous_readings[previous_readings_index] = current_pressure;
+            previous_readings_index++;
+        }
+
+        // Check for index out of bounds for list of previous readings
+        if (previous_readings_index >= PREV_READINGS_SIZE) {
+            previous_readings_index = 0;
+            sample_recorded = true;
+        }
+
+        // If at least 50 readings have been recorded, then compare with running average
+        if (sample_recorded) {
+
+            // If current read is outside of threshold, sensor reading is bad, don't add to total
+            if (is_within_boundry(current_pressure)) {
+                total += current_pressure;
+
+                // For debugging
+                // Serial.print("is within boundry! New total: ");
+                // Serial.println(total);
+            }
+            else {
+                // For debugging
+                // Serial.print("not in boundry: ");
+                // Serial.println(current_pressure);
+
+                encountered_out_of_bounds_reading = true;
+            }
+        }
+        // Otherwise if less than 50 tests have been recorded, just add it to total
+        else {
+            total += current_pressure;
+        }
         count++;
     }
 
     result = total / count;
     count = 0;
 
-    Serial.print("Processed read: ");
-    Serial.println(result);
+    // Handle processed read of 0 when out of bounds reading occurs
+    if (result > 0) {
+
+        // Store prior processed read for future comparasions
+        prior_processed_read = result;
+    }
+    else if (prior_processed_read == 0) {
+        int comparasion_index;
+        int i = 1;
+
+        // set result to last non zero value
+        while (i < PREV_READINGS_SIZE && result == 0) {
+
+            comparasion_index = previous_readings_index - i;
+
+            // Check if index is withing range of 0 to PREV_READINGS_SIZE - 1
+            if (comparasion_index < 0) {
+                result = previous_readings[PREV_READINGS_SIZE - comparasion_index];
+            }
+            else {
+                result = previous_readings[comparasion_index];
+            }
+            i++;
+        }
+        // For debugging
+        // Serial.println("Prior processed read was 0! Processed read of 0 has been updated to: ");
+    }
+    else {
+        result = prior_processed_read;
+        
+        // For debugging
+        // Serial.println("Processed read of 0 has been updated to: ");
+    }
+
+    // For debugging
+    // Serial.print("Processed read: ");
+    // Serial.println(result);
 
     return result;
+}
+
+/**
+ * @brief Returns true if the new pressure given is within the boundry percentage of the average of the previous 10 tests
+ * 
+ * @note Boundry can be changed to fit current needs inorder to avoid recording noise
+ *
+ * @param pressure New Raw pressure reading  
+ * @return true if all tests were within the boundry
+ */
+bool is_within_boundry(int pressure) {
+    const float BOUNDRY = 0.25;
+    bool within_boundry = false;
+    float avg;
+    int total = 0;
+    int min;
+    int max;
+
+    // take the average of the previous pressure readings
+    for (int i = 0; i < PREV_READINGS_SIZE; i++) {
+        total += previous_readings[i];
+    }
+
+    avg = total / PREV_READINGS_SIZE;
+
+    // Find limits of pressure range based on boundry percentage
+    min = avg - (avg * BOUNDRY);
+    max = avg + (avg * BOUNDRY);
+
+    // check that given pressure is within these values
+    if (min <= pressure && pressure <= max) {
+        within_boundry = true;
+    }
+    else {
+        Serial.print("Pressure of: ");
+        Serial.print(pressure);
+        Serial.print(" was outside of bounds for average: ");
+        Serial.println(avg);
+    }
+
+    return within_boundry;
 }
 
 /**
@@ -239,6 +351,9 @@ float pressure_to_depth(int pressure) {
     const int MM_IN_CM = 10;
 
     float depth = (pressure * SLOPE - OFFSET) * MM_IN_CM;
+
+    // For debugging
+    Serial.println((String) "current depth: " + depth + "mm");
 
     return depth;
 }
@@ -277,25 +392,7 @@ time_t fill_to_depth(float target_depth) {
 }
 
 /**
- * @brief Ensures the drain cycle time is only initialized once even when
- * running in loop
- *
- * @return time_t drain cycle time
- */
-time_t initialize_drain_cycle_time() {
-    time_t time = drain_cycle_time;
-
-    if (!drain_cycle_initialized) {
-        drain_cycle_initialized = true;
-        time = millis();
-    }
-
-    return time;
-}
-
-/**
  * @brief Returns true if the debounced button is pressed
- * Also blinks the LED_TEST_STATUS while being held
  *
  * @note because this is being called in loop(), all variables are defined globally
  * outside of this function
@@ -303,46 +400,80 @@ time_t initialize_drain_cycle_time() {
  * @return true if button is pressed
  */
 bool button_check() {
-
+    const int BUTTON_HOLD_THRESHOLD = 5000; // length button has to be held for (in cycles, not in ms)
+    const int BUTTON_PRESS_COOLDOWN = 2000; // minimum amount of time between button presses (in ms)
     bool pressed = false;
 
     if (digitalRead(START_BUTTON)) {
         button_counter++;
 
         // Debounce button and hold for a few seconds
-        if ((button_counter > BUTTON_HOLD_THRESHOLD) &&
-            (millis() - button_timer < 2000)) {
+        if ((button_counter > BUTTON_HOLD_THRESHOLD) && (millis() - button_timer > BUTTON_PRESS_COOLDOWN)) {
             // Reset timer
             button_timer = millis();
 
             pressed = true;
-
-            // ----------- TODO: move this -----------------
-            // Toggle the LED status
-            if (test_running) {
-                digitalWrite(LED_TEST_STATUS, HIGH);
-                test_start_time = millis();
-            } else {
-                digitalWrite(LED_TEST_STATUS, LOW);
-            }
-            // ---------------------------------------------
-
         }
-        // Blink the status LED while the button is being held
-        else if ((button_counter > 50) &&
-                 (button_counter < BUTTON_HOLD_THRESHOLD)) {
-            // Toggle LED based on time
-            if (button_counter % 50 > 25) {
-                digitalWrite(LED_TEST_STATUS, HIGH);
-            } else {
-                digitalWrite(LED_TEST_STATUS, LOW);
-            }
+        else {
+            update_status_led();
         }
     } else {
         button_counter = 0;
+        update_status_led();
+    }
+
+    if (pressed) {
+        Serial.println("BUTTON WAS PRESSED");
     }
 
     return pressed;
+}
+
+/**
+ * @brief sets the status LED according to if the test is running
+ */
+void update_status_led() {
+    // Update the LED according to the test status when the button isn't being pressed
+    // If test is running, green light should be on, otherwise off
+    if (test_running) {
+        digitalWrite(LED_TEST_STATUS, HIGH);
+    } else {
+        digitalWrite(LED_TEST_STATUS, LOW);
+    }
+}
+
+/**
+ * @brief Returns true if the three given tests completion times are completed within 5% of eachother
+ *
+ * @param tests array of previous 3 test completion times
+ * @return true if all tests were within 5%
+ */
+bool is_within_five_percent(time_t tests[]) {
+    float min_threshold;
+    float max_threshold;
+    int next_test_index;
+    int following_test_index;
+    bool within_threshold = true;
+    int i = 0;
+
+    while (within_threshold && i < 3) {
+        // Find boundry within 5% of each tests time and check that the other tests were completed within that boundry
+        min_threshold = tests[i] - (tests[i] * 0.05);
+        max_threshold = tests[i] + (tests[i] * 0.05);
+
+        next_test_index = (i + 1) % 3;
+        following_test_index = (i + 2) % 3;
+
+        // Check that the other two tests fall within these values
+        if (!((min_threshold <= tests[next_test_index] && tests[next_test_index] <= max_threshold)
+            && (min_threshold <= tests[following_test_index] && tests[following_test_index] <= max_threshold))) {
+            within_threshold = false;
+        }
+
+        i++;
+    }
+
+    return within_threshold;
 }
 
 /**
@@ -451,10 +582,20 @@ void loop() {
 
         // Toggle the test status
         test_running = !test_running;
+
+        // For debugging
         Serial.println("Toggling test!");
+        Serial.println((String) "Current mode: " + current_mode);
+
+        update_status_led();
+        log();
+    }
+    
+    // Record the time when the test starts
+    if (test_running) {
+        test_start_time = millis();
     }
 
-    log();
 
     // Check error status
     if (error_message.length() > 0) {
@@ -468,13 +609,14 @@ void loop() {
     // Run the test
     if (test_running) {
         // - - - - - - Test first drain cycle - - - - - -
-        current_mode = MODE_DRAIN_CYCLE;
+        current_mode = MODE_DRAIN_CYCLE;        
+        Serial.println((String) "New mode: " + current_mode);
 
         // Fill borehole to 300mm
         fill_to_depth(DRAIN_CYCLE_DEPTH_MAX);
 
         // Record time to drain hold completely
-        drain_cycle_time = initialize_drain_cycle_time();
+        drain_cycle_time = millis();
 
         current_depth = pressure_to_depth(readPressureSensor());
 
@@ -482,7 +624,9 @@ void loop() {
         while ((current_depth > 0)
                 && (millis() - drain_cycle_time < FOUR_HOURS)
                 && !skip_drain_cycle) {
+
             current_depth = pressure_to_depth(readPressureSensor());
+
 
             skip_drain_cycle = button_check();
             log();
@@ -500,6 +644,9 @@ void loop() {
 
             // - - - - - - Saturation mode: - - - - - -
             current_mode = MODE_SATURATION;
+
+            Serial.println((String) "New mode: " + current_mode);
+
             saturation_mode_begin_time = millis();
 
             while (!saturation_complete &&
@@ -524,25 +671,20 @@ void loop() {
 
                 saturation_end_time = millis();
 
-                prior_tests[current_index] = saturation_end_time;
+                prior_tests[current_index] = saturation_end_time - saturation_start_time;
 
                 current_index = next_test_index(current_index);
 
                 // Once the time of 3 consecutive saturation cycles are within
                 // 5% of each other, the saturation phase is complete
                 if (cycle_count > 3) {
-                    // If all 3 prior tests are within 5% of each other,
-                    // saturation is complete
-                    // TODO: verify if this check is correct
-                    if (abs(prior_tests[2] - prior_tests[1]) <
-                        (prior_tests[0] * 0.05)) {
-                        saturation_complete = true;
-                    }
+                    saturation_complete = is_within_five_percent(prior_tests);
                 }
 
                 // Break condition
                 // Saturation mode can be manually completed by button
                 saturation_complete = button_check();
+                log();
             }
 
             // - - - - - - Testing mode: - - - - - -
@@ -552,6 +694,8 @@ void loop() {
             // the test phase is complete
 
             current_mode = MODE_TEST;
+            Serial.println((String) "New mode: " + current_mode);
+
             test_mode_begin_time = millis();
             cycle_count = 0;
 
@@ -565,6 +709,7 @@ void loop() {
                 // Wait until depth is at 50 + offset
                 while (current_depth > TEST_MODE_DEPTH_MIN + over_fill_amount && !test_complete) {
                     current_depth = pressure_to_depth(readPressureSensor());
+                    log();
 
                     // break condition
                     if (button_check()) {
@@ -573,40 +718,52 @@ void loop() {
                 }
 
                 test_end_time = millis();
-                prior_tests[current_index] = test_end_time;
+                prior_tests[current_index] = test_end_time - test_start_time;
                 current_index = next_test_index(current_index);
 
                 if (cycle_count > 3) {
-
-                    // TODO: verify if this check is correct
-                    if (abs(prior_tests[2] - prior_tests[1]) <
-                        (prior_tests[0] * 0.05)) {
-                        test_complete = true;
-                    }
+                    test_complete = is_within_five_percent(prior_tests);
                 }
-            }
 
+                log();
+            }
 
             // - - - - - - Stability mode: - - - - - -
             // The water level and time it takes for water to drain from 150mm
             // to 50mm is auto recorded 5 times.
 
             current_mode = MODE_STABILITY;
+            Serial.println((String) "New mode: " + current_mode);
+
             stability_mode_begin_time = millis();
             cycle_count = 0;
 
-            while (!stability_complete) {
-                for (int i = 0; i < 5; i++) {
-                    cycle_count++;
+            // fill 5 times and wait to drain
+            for (int i = 0; i < 5; i++) {
+                cycle_count++;
 
-                    // Fill to 150mm
-                    stability_start_time = fill_to_depth(STABILITY_MODE_DEPTH_MAX);
+                // Fill to 150mm
+                stability_start_time = fill_to_depth(STABILITY_MODE_DEPTH_MAX);
 
-                    // Wait until depth is at 50 + offset
+                current_depth = pressure_to_depth(readPressureSensor());
+
+                // Wait until depth is at 50 + offset
+                while (current_depth > STABILITY_MODE_DEPTH_MIN + over_fill_amount && !stability_complete) {
                     current_depth = pressure_to_depth(readPressureSensor());
+
+                    log();
+                    stability_complete = button_check();
                 }
+
+                log();
             }
+            stability_complete = true;
         }
         current_mode = MODE_COMPLETE;
+        Serial.println((String) "New mode: " + current_mode);
+
+        if (!test_necessary) {
+            Serial.println("Test was not necessary!");
+        }
     }
 }

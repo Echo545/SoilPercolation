@@ -1,5 +1,6 @@
 # Automated Soil Percolation Tester
-Automated soil percolation tester prototype for EMI Uganda (WIP) using an ESP32
+Automated soil percolation tester prototype for EMI Uganda using an ESP32. 
+Work in progress.
 
 ## Project Structure
 
@@ -7,7 +8,7 @@ Automated soil percolation tester prototype for EMI Uganda (WIP) using an ESP32
 
 `libraries` contains the non-standard Arduino libraries used for easy access
 
-`testProgram` contains a number of simple programs used to help verify proper electrical setup and that the hardware components are correctly functioning
+`testPrograms` contains a number of simple programs used to help verify proper electrical setup and that the hardware components are correctly functioning
 
 `sd_card_contents` contains the entire contents of the SD card including libraries, html files, and the test log.
 
@@ -51,9 +52,7 @@ The ball valve doesn't open and close instantaneously. The three main approaches
 We went with approach number three. To improve the accuracy of your results, update the amount of time that it takes your valve to toggle entirely from one state to the other in the `fill_to_depth()` function.
 
 ## Known Issues
-* Noise in the data coming from the pressure sensor can cause the test to jump to the next phase too early.  A simple solution for this would be to set some thresholds that are either constants or functions of the current pressure reading, and if the new pressure reading is outside of the threshold of acceptable values, then discard it.
-* The physical button start button does not always skip to the next phase like it is supposed to do. It also doesn't always update the status LED properly.
-* The equation used in the `loop()` function in the Saturation Mode and Testing Mode is not correct for all conditions. This is marked by `TODO` comments
+* Noise in the data coming from the pressure sensor can cause the test to jump to the next phase too early. More testing is required in order to determine acceptable thresholds to ignore spikes of noise. These thresholds can be updated in the `readPressureSensor()` function
 * In our lab tests, the program completes almost instantly after finishing the first drain cycle because we had a constant water level. Each of the test phases should be tested independently in an environment where water can drain.
 
 ## Future goals (not in any particular order)
@@ -61,9 +60,8 @@ We went with approach number three. To improve the accuracy of your results, upd
 * Create an additional log that uses the time
 * Create a captive portal to automatically open the web interface in the browser of any device that connects to the network without having to manually go to the IP address of the server.
 * Add more controls in the web interface to allow easy jumping between test phases.
-* Create an easy way to update the time
+* Create an easy way to update the timezone
 * Create an easy way to upload new files to and update existing files on the SD card without having to remove it every time.
-* Create an easy way to run a new test without restarting the Arduino (or hitting the EN button)
 
 ## Additional Tests
 
@@ -92,7 +90,7 @@ Interested in testing code without having to deal with the electrical configurat
 
 We discovered this great web-based Arduino emulator called *Wokwi*. You will need an account to have access to all the features (particularly with use of the SD card), but even without registering it can still be helpful in debugging your code.
 
-You may notice the code running on the emulator is not totally in sync with this git repo. Checkout the branch called `virtual` for a version of the project code made to run on the Wokwi platform.
+You may notice the code running on the emulator is not totally in sync with this git repository. Checkout the branch called `virtual` for a version of the project code made to run on the Wokwi platform.
 
 Checkout the project link [here](https://wokwi.com/projects/330306268263613010)
 
