@@ -413,6 +413,7 @@ bool button_check() {
             button_timer = millis();
 
             pressed = true;
+            button_counter = 0;
         }
         else {
             update_status_led();

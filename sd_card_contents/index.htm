@@ -1,230 +1,123 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>ESP8266 WEB SERVER</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="data:," />
-    <style>
-      html {
-        font-family: Arial;
-        display: inline-block;
-        text-align: center;
-      }
-      p {
-        font-size: 3rem;
-      }
-      .container {
-        background-color: white;
-      }
-      .switch {
-        position: relative;
-        display: inline-block;
-        width: 120px;
-        height: 68px;
-      }
-      .switch input {
-        display: none;
-      }
-      .slider {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #ccc;
-        border-radius: 6px;
-      }
-      .slider:before {
-        position: absolute;
-        content: "";
-        height: 52px;
-        width: 52px;
-        left: 8px;
-        bottom: 8px;
-        background-color: #fff;
-        -webkit-transition: 0.4s;
-        transition: 0.4s;
-        border-radius: 3px;
-      }
-      input:checked + .slider {
-        background-color: #b30000;
-      }
-      input:checked + .slider:before {
-        -webkit-transform: translateX(52px);
-        -ms-transform: translateX(52px);
-        transform: translateX(52px);
-      }
-      /* ul {list-style-type: none; margin: 0; padding: 0; display: inline; float: left; background-color: #dddddd;} */
-      /* a {display: block; padding: 8px; float: left; color: #f2f2f2; text-align: center;
-       padding: 14px 16px; text-decoration: none; font-size: 17px;} */
-      /* body {margin: 0; padding: 0;} */
-      .nav ul {
-        display: flex;
-        background-color: #444;
-        margin: 0;
-      }
-      .nav li {
-        display: flex;
-        list-style: none;
-        font-family: "Oswald", sans-serif;
-        font-size: 1.2em;
-        line-height: 40px;
-        height: 40px;
-        border-bottom: 1px solid #888;
-        padding: 18px 30px;
-      }
-      .nav a {
-        text-decoration: none;
-        color: white;
-        font-size: 2.5vw;
-      }
-      .nav li a:hover {
-        color: black;
-      }
-      .card {
-        box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.2);
-        transition: 0.3s;
-        border-radius: 5px;
-        padding-bottom: 50px;
-        padding-top: 15px;
-      }
-      .pressureReading {
-        font-size: 2vw;
-        font-family: "Franklin Gothic Medium", "Arial Narrow", Arial, sans-serif;
-      }
-      button {
-        display: inline-block;
-        padding: 0.75rem 1.25rem;
-        border-radius: 10rem;
-        text-transform: uppercase;
-        font-size: 1vw;
-        letter-spacing: 0.15rem;
-        transition: all 0.3s;
-        position: relative;
-        overflow: hidden;
-        margin-top: 25px;
-        z-index: 1;
-      }
-      #refresh {
-        color: #fff;
-        background-color: skyblue;
-      }
-      #refresh:hover {
-        background-color: blue;
-      }
-    </style>
-  </head>
-  <div class="nav">
-    <ul>
-      <li><a href="index.htm">Home</a></li>
-      <li><a href="output.csv">csv_download</a></li>
-      <li><a href="graph.htm">Live Graph</a></li>
-    </ul>
+
+<head>
+  <title>Soil Percolator Home</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="assets/css/main.css">
+</head>
+<div class="nav">
+  <ul>
+    <li><a href="index.htm">Home</a></li>
+    <li><a href="output.csv">Download</a></li>
+    <li><a href="graph.htm">Live Graph</a></li>
+  </ul>
+</div>
+
+<body>
+  <div class="container">
+    <div class="card">
+      <h2 class="pressureReading">
+        Current Testing Phase:
+        <span class="pressureReading" id="test-phase"></span>
+      </h2>
+
+      <h2 class="pressureReading">
+        Raw Pressure Sensor Output:
+        <span class="pressureReading" id="rawpressure">165</span>
+      </h2>
+      <br />
+      <h2 class="pressureReading">
+        Processed Pressure Sensor Output:
+        <span class="pressureReading" id="pressure">0cm</span>
+      </h2>
+      <br />
+      <h2 class="pressureReading">
+        Depth: <span class="pressureReading" id="depth">null</span>
+      </h2>
+      <br />
+      <button type="button" id="refresh">
+        Refresh Data <i class="fa fa-refresh"></i>
+      </button>
+    </div>
   </div>
 
-  <body>
-    <div class="container">
-      <div class="card">
-        <h2 class="pressureReading">
-          Current Testing Phase:
-          <span class="pressureReading" id="test-phase"></span>
-        </h2>
+  <script>
+    function toggleCheckbox(element) {
+      var xhr = new XMLHttpRequest();
+      if (element.checked) {
+        xhr.open("GET", "/update?output=" + element.id + "&state=1", true);
+      } else {
+        xhr.open("GET", "/update?output=" + element.id + "&state=0", true);
+      }
+      xhr.send();
+    }
 
-        <h2 class="pressureReading">
-          Raw Pressure Sensor Output:
-          <span class="pressureReading" id="rawpressure">165</span>
-        </h2>
-        <br />
-        <h2 class="pressureReading">
-          Processed Pressure Sensor Output:
-          <span class="pressureReading" id="pressure">0cm</span>
-        </h2>
-        <br />
-        <h2 class="pressureReading">
-          Depth: <span class="pressureReading" id="depth">null</span>
-        </h2>
-        <br />
-        <button type="button" id="refresh">
-          Refresh Data <i class="fa fa-refresh"></i>
-        </button>
-      </div>
-    </div>
+    document
+      .getElementById("refresh")
+      .addEventListener("click", getRawPressure);
+    document
+      .getElementById("refresh")
+      .addEventListener("click", getProcessedPressure);
+    document.getElementById("refresh").addEventListener("click", getState);
+    document.getElementById("refresh").addEventListener("click", getDepth);
 
-    <script>
-      function toggleCheckbox(element) {
-        var xhr = new XMLHttpRequest();
-        if (element.checked) {
-          xhr.open("GET", "/update?output=" + element.id + "&state=1", true);
-        } else {
-          xhr.open("GET", "/update?output=" + element.id + "&state=0", true);
+    function getRawPressure() {
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+          document.getElementById("rawpressure").innerHTML =
+            this.responseText;
         }
-        xhr.send();
-      }
+      };
+      xhttp.open("GET", "/rawpressure", true);
+      xhttp.send();
+    }
 
-      document
-        .getElementById("refresh")
-        .addEventListener("click", getRawPressure);
-      document
-        .getElementById("refresh")
-        .addEventListener("click", getProcessedPressure);
-      document.getElementById("refresh").addEventListener("click", getState);
-      document.getElementById("refresh").addEventListener("click", getDepth);
+    function getProcessedPressure() {
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+          document.getElementById("pressure").innerHTML = this.responseText;
+        }
+      };
+      xhttp.open("GET", "/pressure", true);
+      xhttp.send();
+    }
 
-      function getRawPressure() {
-        var xhttp = new XMLHttpRequest();
-        xhttp.onreadystatechange = function () {
-          if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("rawpressure").innerHTML =
-              this.responseText;
-          }
-        };
-        xhttp.open("GET", "/rawpressure", true);
-        xhttp.send();
-      }
+    function getState() {
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+          document.getElementById("test-phase").innerHTML = this.responseText;
+        }
+      };
+      xhttp.open("GET", "/status", true);
+      xhttp.send();
+    }
 
-      function getProcessedPressure() {
-        var xhttp = new XMLHttpRequest();
-        xhttp.onreadystatechange = function () {
-          if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("pressure").innerHTML = this.responseText;
-          }
-        };
-        xhttp.open("GET", "/pressure", true);
-        xhttp.send();
-      }
+    function getDepth() {
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+          document.getElementById("depth").innerHTML = this.responseText;
+        }
+      };
+      xhttp.open("GET", "/depth", true);
+      xhttp.send();
+    }
 
-      function getState() {
-        var xhttp = new XMLHttpRequest();
-        xhttp.onreadystatechange = function () {
-          if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("test-phase").innerHTML = this.responseText;
-          }
-        };
-        xhttp.open("GET", "/status", true);
-        xhttp.send();
-      }
+    // Update state display every 5 seconds
+    // setInterval(getState, 5000);
 
-      function getDepth() {
-        var xhttp = new XMLHttpRequest();
-        xhttp.onreadystatechange = function () {
-          if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("depth").innerHTML = this.responseText;
-          }
-        };
-        xhttp.open("GET", "/depth", true);
-        xhttp.send();
-      }
+    // Load initial data
+    document.onload(() => {
+      getDepth();
+      getState();
+      getRawPressure();
+      getProcessedPressure();
+    });
+  </script>
+</body>
 
-      // Update state display every 5 seconds
-      // setInterval(getState, 5000);
-
-      // Load initial data
-      document.onload(() => {
-        getDepth();
-        getState();
-        getRawPressure();
-        getProcessedPressure();
-      });
-    </script>
-  </body>
 </html>

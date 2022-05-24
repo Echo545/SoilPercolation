@@ -1,0 +1,124 @@
+html {
+    font-family: Arial;
+    display: inline-block;
+    text-align: center;
+}
+
+p {
+    font-size: 3rem;
+}
+
+.container {
+    background-color: white;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 120px;
+    height: 68px;
+}
+
+.switch input {
+    display: none;
+}
+
+.slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    border-radius: 6px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 52px;
+    width: 52px;
+    left: 8px;
+    bottom: 8px;
+    background-color: #fff;
+    -webkit-transition: 0.4s;
+    transition: 0.4s;
+    border-radius: 3px;
+}
+
+input:checked+.slider {
+    background-color: #b30000;
+}
+
+input:checked+.slider:before {
+    -webkit-transform: translateX(52px);
+    -ms-transform: translateX(52px);
+    transform: translateX(52px);
+}
+
+/* ul {list-style-type: none; margin: 0; padding: 0; display: inline; float: left; background-color: #dddddd;} */
+/* a {display: block; padding: 8px; float: left; color: #f2f2f2; text-align: center;
+       padding: 14px 16px; text-decoration: none; font-size: 17px;} */
+/* body {margin: 0; padding: 0;} */
+.nav ul {
+    display: flex;
+    background-color: #444;
+    margin: 0;
+}
+
+.nav li {
+    display: flex;
+    list-style: none;
+    font-family: "Oswald", sans-serif;
+    font-size: 1.2em;
+    line-height: 40px;
+    height: 40px;
+    border-bottom: 1px solid #888;
+    padding: 18px 30px;
+}
+
+.nav a {
+    text-decoration: none;
+    color: white;
+    font-size: 2.5vw;
+}
+
+.nav li a:hover {
+    color: black;
+}
+
+.card {
+    box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.2);
+    transition: 0.3s;
+    border-radius: 5px;
+    padding-bottom: 50px;
+    padding-top: 15px;
+}
+
+.pressureReading {
+    font-size: 2vw;
+    font-family: "Franklin Gothic Medium", "Arial Narrow", Arial, sans-serif;
+}
+
+button {
+    display: inline-block;
+    padding: 0.75rem 1.25rem;
+    border-radius: 10rem;
+    text-transform: uppercase;
+    font-size: 1vw;
+    letter-spacing: 0.15rem;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+    margin-top: 25px;
+    z-index: 1;
+}
+
+#refresh {
+    color: #fff;
+    background-color: skyblue;
+}
+
+#refresh:hover {
+    background-color: blue;
+}

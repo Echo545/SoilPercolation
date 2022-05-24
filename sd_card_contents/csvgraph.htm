@@ -1,56 +1,24 @@
-<!DOCTYPE HTML><html>
-<!-- Rui Santos - Complete project details at https://RandomNerdTutorials.com
+<!DOCTYPE HTML>
+<html>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files.
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software. -->
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script type="text/javascript" src="highcharts.js"></script>
-  <script type="text/javascript" src="exporting.js"></script>
-  <script type="text/javascript" src="data.js"></script>
+  <script type="text/javascript" src="assets/js/highcharts.js"></script>
+  <script type="text/javascript" src="assets/js/exporting.js"></script>
+  <script type="text/javascript" src="assets/js/data.js"></script>
 
+  <link rel="stylesheet" href="assets/css/graph.css">
 
-  <style>
-    /* body {
-      min-width: 310px;
-    	max-width: 800px;
-    	height: 400px;
-      margin: 0 auto;
-    } */
-    h2 {
-      font-family: Arial;
-      font-size: 2.5rem;
-      text-align: center;
-    }
-    pre {
-      border: 1px solid silver;
-      border-radius: 0.5em;
-      padding: 1em;
-      color: green;
-    }
-
-    .nav ul {display: flex; background-color: #444;
-             margin: 0;}
-    .nav li {display: flex; list-style: none; font-family: 'Oswald', sans-serif;
-             font-size: 1.2em; line-height: 40px; height: 40px; border-bottom: 1px solid #888;
-             padding: 18px 30px;}
-    .nav a {text-decoration: none; color: white; font-size: 2.5vw;}
-    .nav li a:hover {color: black;}
-    .heading {font-size: 3vw;}
-    .pressureReading {font-size: 2vw; font-family: 'Franklin Gothic Medium', Arial; color:darkred;}
-  </style>
 </head>
+
 <body>
   <div class="nav">
     <ul>
       <li><a href="index.htm">Home</a></li>
-      <li><a href="sdContents\index.htm">csv_download</a></li>
+      <li><a href="sdContents\index.htm">Download</a></li>
       <li><a href="graph.htm">Live Graph</a></li>
     </ul>
   </div>
-
 
   <h4 class="pressureReading">CSV Data</h4>
 
@@ -67,16 +35,17 @@ copies or substantial portions of the Software. -->
 </body>
 <script>
 
-Highcharts.Chart('chart-csv',{
-  chart:{ renderTo:'chart-csv' },
-  title: { text: 'csv' },
-  credits: { enabled: false },
-  data: {
-    csvURL: 'http://192.168.4.1/output.csv',
-    enablePolling: true
-  }
-});
+  Highcharts.Chart('chart-csv', {
+    chart: { renderTo: 'chart-csv' },
+    title: { text: 'csv' },
+    credits: { enabled: false },
+    data: {
+      csvURL: 'http://192.168.4.1/output.csv',
+      enablePolling: true
+    }
+  });
 
 
 </script>
+
 </html>
